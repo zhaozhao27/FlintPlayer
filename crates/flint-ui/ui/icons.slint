@@ -1,0 +1,80 @@
+export component Glyph inherits Path {
+    in property <int> kind: 0;
+    in property <color> tint: #e2e2e2;
+
+    width: 16px;
+    height: 16px;
+    viewbox-width: 16;
+    viewbox-height: 16;
+    stroke: tint;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+
+    fill: (kind == 0 || kind == 1 || kind == 2 || kind == 3 || kind == 4
+        || kind == 10 || kind == 12 || kind == 26) ? tint : transparent;
+    stroke-width: (kind == 0 || kind == 1 || kind == 2 || kind == 3 || kind == 4
+        || kind == 10 || kind == 12 || kind == 26) ? 0px : (kind == 9 || kind == 13 || kind == 17 ? 1.8px : 1.2px);
+
+    commands: kind == 0 ? "M 4 2 L 14 8 L 4 14 Z"
+        : kind == 1 ? "M 4 2 L 6.5 2 L 6.5 14 L 4 14 Z M 9.5 2 L 12 2 L 12 14 L 9.5 14 Z"
+        : kind == 2 ? "M 3 3 L 13 3 L 13 13 L 3 13 Z"
+        : kind == 3 ? "M 2 3 L 6.5 8 L 2 13 Z M 7 3 L 11.5 8 L 7 13 Z"
+        : kind == 4 ? "M 14 3 L 9.5 8 L 14 13 Z M 9 3 L 4.5 8 L 9 13 Z"
+        : kind == 5 ? "M 2 4 L 7 4 L 8.5 6 L 14 6 L 14 13 L 2 13 Z"
+        : kind == 6 ? "M 7 1.5 A 5.5 5.5 0 1 0 7 12.5 A 5.5 5.5 0 1 0 7 1.5 Z M 11 11 L 14.5 14.5"
+        : kind == 7 ? "M 8 1 L 8 3 M 8 13 L 8 15 M 1 8 L 3 8 M 13 8 L 15 8 M 3 3 L 4.5 4.5 M 11.5 11.5 L 13 13 M 13 3 L 11.5 4.5 M 4.5 11.5 L 3 13 M 8 4.5 A 3.5 3.5 0 1 0 8 11.5 A 3.5 3.5 0 1 0 8 4.5"
+        : kind == 8 ? "M 8 1.5 A 6.5 6.5 0 1 0 8 14.5 A 6.5 6.5 0 1 0 8 1.5 Z M 8 7 L 8 11 M 8 4.6 L 8 5"
+        : kind == 9 ? "M 2 4 L 14 4 M 2 8 L 14 8 M 2 12 L 14 12"
+        : kind == 10 ? "M 2 6 L 5 6 L 9 2 L 9 14 L 5 10 L 2 10 Z"
+        : kind == 11 ? "M 2 6 L 5 6 L 9 2 L 9 14 L 5 10 L 2 10 Z M 11 6 L 14 9 M 14 6 L 11 9"
+        : kind == 12 ? "M 6 1.5 L 10 1.5 L 10 5.5 L 13 8 L 9 8 L 9 14 L 7 14 L 7 8 L 3 8 L 6 5.5 Z"
+        : kind == 13 ? "M 3 8 L 13 8"
+        : kind == 14 ? "M 3.5 3.5 L 12.5 3.5 L 12.5 12.5 L 3.5 12.5 Z"
+        : kind == 15 ? "M 5 5 L 13 5 L 13 13 L 5 13 Z M 3 3 L 11 3"
+        : kind == 16 ? "M 2 6 L 2 2 L 6 2 M 10 2 L 14 2 L 14 6 M 14 10 L 14 14 L 10 14 M 6 14 L 2 14 L 2 10"
+        : kind == 17 ? "M 3.5 3.5 L 12.5 12.5 M 12.5 3.5 L 3.5 12.5"
+        : kind == 18 ? "M 8 3 L 8 13 M 3 8 L 13 8"
+        : kind == 19 ? "M 3 4 L 13 4 M 6 4 L 6 2 L 10 2 L 10 4 M 4.5 4 L 5.5 14 L 10.5 14 L 11.5 4"
+        : kind == 20 ? "M 1.5 3 L 14.5 3 L 14.5 13 L 1.5 13 Z M 4 7 L 8 7 M 10 7 L 12 7 M 4 10 L 7 10"
+        : kind == 21 ? "M 2 5 L 5 5 L 6.5 3 L 9.5 3 L 11 5 L 14 5 L 14 13 L 2 13 Z M 8 6.5 A 2.6 2.6 0 1 0 8 11.7 A 2.6 2.6 0 1 0 8 6.5"
+        : kind == 22 ? "M 3 8 A 5 5 0 1 1 5.2 12 M 2.5 4.5 L 3 8.8 L 7 8.2"
+        : kind == 23 ? "M 6 3 L 11 8 L 6 13"
+        : kind == 24 ? "M 3 6 L 8 11 L 13 6"
+        : kind == 25 ? "M 3 8 L 6.5 11.5 L 13 4.5"
+        : kind == 26 ? "M 8 1 L 10 6 L 15 8 L 10 10 L 8 15 L 6 10 L 1 8 L 6 6 Z"
+        : kind == 27 ? "M 2 3 L 3.5 3 M 6 3 L 14 3 M 2 8 L 3.5 8 M 6 8 L 14 8 M 2 13 L 3.5 13 M 6 13 L 14 13"
+        : kind == 28 ? "M 9 1.5 L 14.5 7 L 11.2 7.5 L 9.5 11.2 L 4.8 6.5 L 8.5 4.8 Z M 6.4 9.6 L 2 14"
+        : "";
+
+}
+
+export component IconButton inherits Rectangle {
+    in property <int> kind: 0;
+    in property <color> tint: #e2e2e2;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <bool> danger-hover: false;
+    in property <length> button-size: 28px;
+    in property <length> glyph-size: 16px;
+    callback clicked;
+
+    width: button-size;
+    height: button-size;
+    border-radius: 4px;
+    background: danger-hover && ta.has-hover && enabled ? #c42b1c
+        : (active ? #3c3c3c : (ta.has-hover && enabled ? #232323 : transparent));
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    Glyph {
+        kind: root.kind;
+        tint: danger-hover && ta.has-hover ? #ffffff : (root.enabled ? root.tint : #5c5c5c);
+        width: root.glyph-size;
+        height: root.glyph-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}

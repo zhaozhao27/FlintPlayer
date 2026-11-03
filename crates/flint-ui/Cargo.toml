@@ -1,0 +1,40 @@
+[package]
+name = "flint-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Low-latency USB video capture and streaming viewer"
+default-run = "flintplayer"
+
+[[bin]]
+name = "flintplayer"
+path = "src/main.rs"
+
+[dependencies]
+flint-core.workspace = true
+flint-media.workspace = true
+slint.workspace = true
+image.workspace = true
+crossbeam-channel.workspace = true
+log.workspace = true
+env_logger.workspace = true
+parking_lot.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+
+[package.metadata.deb]
+name = "flintplayer"
+maintainer = "lzzhang <flint.lzzhang@ingenic.com>"
+copyright = "2026, lzzhang"
+license-file = ["../../LICENSE", "4"]
+extended-description = "A sleek, low-latency USB V4L2 capture and streaming viewer for Linux, with a PotPlayer-style interface and Tab OSD."
+section = "video"
+priority = "optional"
+depends = "$auto, fonts-noto-cjk"
+assets = [
+    ["target/release/flintplayer", "usr/bin/flintplayer", "755"],
+    ["../../assets/flintplayer.desktop", "usr/share/applications/flintplayer.desktop", "644"],
+    ["../../assets/icons/flintplayer.png", "usr/share/icons/hicolor/256x256/apps/flintplayer.png", "644"],
+]

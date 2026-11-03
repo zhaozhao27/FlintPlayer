@@ -1,0 +1,163 @@
+export struct OsdToken {
+    text: string,
+    tone: int,
+}
+
+component OsdText inherits Rectangle {
+    in property <string> text: "";
+    in property <color> text-color: #ffffff;
+    in property <length> text-size: 16px;
+
+    width: main-text.preferred-width;
+    height: main-text.preferred-height;
+    clip: false;
+
+    Text {
+        x: -1px;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: #000000;
+        font-size: root.text-size;
+        font-family: "Noto Sans CJK SC";
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 1px;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: #000000;
+        font-size: root.text-size;
+        font-family: "Noto Sans CJK SC";
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 0;
+        y: -1px;
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: #000000;
+        font-size: root.text-size;
+        font-family: "Noto Sans CJK SC";
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 0;
+        y: 1px;
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: #000000;
+        font-size: root.text-size;
+        font-family: "Noto Sans CJK SC";
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+
+    main-text := Text {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.text-size;
+        font-family: "Noto Sans CJK SC";
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+}
+
+component OsdField inherits Rectangle {
+    in property <string> label: "";
+    in property <[OsdToken]> tokens: [];
+    in property <length> text-size: 16px;
+
+    height: root.text-size * 1.4;
+    visible: root.tokens.length > 0;
+    background: transparent;
+    clip: true;
+
+    HorizontalLayout {
+        spacing: 0px;
+        alignment: start;
+
+        OsdText {
+            text: root.label;
+            text-color: #ffffff;
+            text-size: root.text-size;
+        }
+
+        Rectangle { width: root.text-size * 0.4; }
+
+        for token in root.tokens : OsdText {
+            text: token.text;
+            text-color: token.tone == 1 ? #ff3b30
+                : token.tone == 2 ? #ff00ff
+                : token.tone == 3 ? #00d0ff
+                : token.tone == 4 ? #ffd400
+                : token.tone == 5 ? #ffffff
+                : #00ff00;
+            text-size: root.text-size;
+        }
+    }
+}
+
+export component OsdTab inherits Rectangle {
+    in property <[OsdToken]> file: [];
+    in property <[OsdToken]> time: [];
+    in property <[OsdToken]> config: [];
+    in property <[OsdToken]> version: [];
+    in property <[OsdToken]> decoder: [];
+    in property <[OsdToken]> input: [];
+    in property <[OsdToken]> format: [];
+    in property <[OsdToken]> output: [];
+    in property <[OsdToken]> renderer: [];
+    in property <[OsdToken]> pixel: [];
+    in property <[OsdToken]> frames: [];
+    in property <[OsdToken]> frame-size: [];
+    in property <[OsdToken]> audio: [];
+    in property <length> text-size: 16px;
+
+    property <length> line-height: root.text-size * 1.4;
+    property <length> section-gap: root.text-size * 0.2;
+
+    height: root.line-height * 13 + root.section-gap * 2;
+    background: transparent;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0px;
+        alignment: start;
+
+        OsdField { label: "文件名:"; tokens: root.file; text-size: root.text-size; }
+        OsdField { label: "当前时间:"; tokens: root.time; text-size: root.text-size; }
+        OsdField { label: "当前配置:"; tokens: root.config; text-size: root.text-size; }
+        OsdField { label: "版本:"; tokens: root.version; text-size: root.text-size; }
+
+        Rectangle { height: root.section-gap; }
+
+        OsdField { label: "视频解码器:"; tokens: root.decoder; text-size: root.text-size; }
+        OsdField { label: "输入:"; tokens: root.input; text-size: root.text-size; }
+        OsdField { label: "格式:"; tokens: root.format; text-size: root.text-size; }
+        OsdField { label: "输出:"; tokens: root.output; text-size: root.text-size; }
+        OsdField { label: "视频渲染器:"; tokens: root.renderer; text-size: root.text-size; }
+        OsdField { label: "- 像素格式:"; tokens: root.pixel; text-size: root.text-size; }
+        OsdField { label: "- 帧:"; tokens: root.frames; text-size: root.text-size; }
+        OsdField { label: "视频帧大小:"; tokens: root.frame-size; text-size: root.text-size; }
+
+        Rectangle { height: root.section-gap; }
+
+        OsdField { label: "音频渲染器:"; tokens: root.audio; text-size: root.text-size; }
+    }
+}

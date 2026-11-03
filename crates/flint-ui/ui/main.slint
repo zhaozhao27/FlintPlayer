@@ -1,0 +1,432 @@
+import { Palette } from "theme.slint";
+import { IconButton } from "icons.slint";
+import { OsdTab, OsdToken } from "osd_tab.slint";
+import { ControlBar } from "control_bar.slint";
+import { DeviceMenu, DeviceEntry, ResolutionEntry } from "device_menu.slint";
+import { CapturePanel, PanelInfo } from "capture_panel.slint";
+
+export { DeviceEntry, ResolutionEntry, PanelInfo, OsdToken }
+
+export component MainWindow inherits Window {
+    title: "FlintPlayer";
+    no-frame: true;
+    resize-border-width: 6px;
+    background: Palette.bg;
+    min-width: 720px;
+    min-height: 480px;
+    always-on-top: root.pinned;
+
+    in property <bool> pinned: false;
+    in property <[PanelInfo]> panels: [];
+    in property <int> active-index: 0;
+    in property <bool> running: false;
+    in property <bool> frozen: false;
+    in property <bool> fullscreen: false;
+    in property <bool> osd-visible: false;
+    in property <bool> chrome-visible: true;
+    in property <bool> menu-open: false;
+
+    in property <[OsdToken]> osd-file: [];
+    in property <[OsdToken]> osd-time: [];
+    in property <[OsdToken]> osd-config: [];
+    in property <[OsdToken]> osd-version: [];
+    in property <[OsdToken]> osd-decoder: [];
+    in property <[OsdToken]> osd-input: [];
+    in property <[OsdToken]> osd-format: [];
+    in property <[OsdToken]> osd-output: [];
+    in property <[OsdToken]> osd-renderer: [];
+    in property <[OsdToken]> osd-pixel: [];
+    in property <[OsdToken]> osd-frames: [];
+    in property <[OsdToken]> osd-frame-size: [];
+    in property <[OsdToken]> osd-audio: [];
+    in property <string> status-error: "";
+    in property <string> bar-elapsed: "00:00:00";
+    in property <string> bar-codec: "";
+    in property <string> bar-size: "";
+    in property <string> bar-rate: "";
+    in property <string> bar-bitrate: "";
+    in property <string> bar-source: "";
+
+    in property <[DeviceEntry]> devices: [];
+    in property <[ResolutionEntry]> resolutions: [];
+    in property <[ResolutionEntry]> formats: [];
+    in property <int> selected-device: -1;
+    in property <int> selected-resolution: -1;
+    in property <int> selected-format: -1;
+    in-out property <string> network-url: "";
+
+    callback key-command(string) -> bool;
+    callback device-picked(int);
+    callback resolution-picked(int);
+    callback format-picked(int);
+    callback refresh-devices;
+    callback connect-network(string);
+    callback start-requested;
+    callback stop-requested;
+    callback snapshot-requested;
+    callback toggle-freeze;
+    callback toggle-osd;
+    callback toggle-fullscreen;
+    callback toggle-menu;
+    callback toggle-always-on-top;
+    callback menu-command(string);
+    callback minimize-window;
+    callback maximize-window;
+    callback close-window;
+    callback panel-picked(int);
+    callback panel-prev;
+    callback panel-next;
+    callback panel-toggle-fullscreen(int);
+    callback panel-closed(int);
+    callback activity;
+
+    forward-focus: keys;
+
+    menu-area := ContextMenuArea {
+        Menu {
+            Menu { title: "打开";
+                MenuItem { title: "打开文件..."; activated => { root.menu-command("open-file"); } }
+                MenuItem { title: "打开设备..."; activated => { root.menu-command("open-device"); } }
+                MenuItem { title: "打开网络串流..."; activated => { root.menu-command("open-network"); } }
+                MenuSeparator { }
+                MenuItem { title: "关闭"; activated => { root.menu-command("close-panel"); } }
+                MenuItem { title: "退出"; activated => { root.menu-command("exit"); } }
+            }
+            Menu { title: "播放";
+                MenuItem { title: "播放/暂停"; activated => { root.menu-command("play-pause"); } }
+                MenuItem { title: "停止"; activated => { root.menu-command("stop"); } }
+                MenuSeparator { }
+                MenuItem { title: "全屏"; activated => { root.menu-command("fullscreen"); } }
+            }
+            Menu { title: "字幕";
+                MenuItem { title: "主字幕"; enabled: false; }
+                MenuItem { title: "次字幕"; enabled: false; }
+                MenuItem { title: "字幕同步..."; enabled: false; }
+            }
+            Menu { title: "视频";
+                MenuItem { title: "全屏"; activated => { root.menu-command("fullscreen"); } }
+                MenuItem { title: "总是置顶"; checkable: true; activated => { root.menu-command("always-on-top"); } }
+                MenuItem { title: "选择视频设备..."; activated => { root.menu-command("open-device"); } }
+            }
+            Menu { title: "声音";
+                MenuItem { title: "静音"; enabled: false; }
+                MenuItem { title: "音量控制"; enabled: false; }
+            }
+            Menu { title: "滤镜";
+                MenuItem { title: "视频滤镜"; enabled: false; }
+            }
+            Menu { title: "皮肤";
+                MenuItem { title: "默认皮肤"; checkable: true; checked: true; enabled: false; }
+            }
+            Menu { title: "配置";
+                MenuItem { title: "保存当前配置"; enabled: false; }
+                MenuItem { title: "恢复默认配置"; enabled: false; }
+            }
+            Menu { title: "选项";
+                MenuItem { title: "播放信息"; activated => { root.menu-command("osd"); } }
+                MenuSeparator { }
+                MenuItem { title: "参数设置..."; enabled: false; }
+            }
+            Menu { title: "查看";
+                MenuItem { title: "播放信息"; activated => { root.menu-command("osd"); } }
+                MenuItem { title: "冻结画面"; activated => { root.menu-command("freeze"); } }
+                MenuItem { title: "截图"; activated => { root.menu-command("snapshot"); } }
+            }
+            Menu { title: "帮助";
+                MenuItem { title: "关于 FlintPlayer"; activated => { root.menu-command("about"); } }
+            }
+        }
+
+        keys := FocusScope {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+
+        capture-key-pressed(event) => {
+            if (!event.repeat && event.modifiers.alt && (event.text == "d" || event.text == "D")) {
+                if (root.key-command("alt+d")) { keys.focus(); accept } else { reject }
+            } else if (!event.repeat && event.modifiers.control && (event.text == "w" || event.text == "W" || event.text == "\u{17}")) {
+                if (root.key-command("ctrl+w")) { keys.focus(); accept } else { reject }
+            } else if (event.text == "\u{1b}") {
+                if (root.key-command(event.text)) { keys.focus(); accept } else { reject }
+            } else if (event.repeat) {
+                reject
+            } else if (event.modifiers.alt || event.modifiers.control || event.modifiers.meta) {
+                reject
+            } else if (root.menu-open && menu.url-focus) {
+                reject
+            } else if (root.key-command(event.text)) {
+                accept
+            } else {
+                reject
+            }
+        }
+
+        titlebar := Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: root.fullscreen ? 0px : 34px;
+            background: Palette.panel-dark;
+            visible: !root.fullscreen;
+
+            WindowMoveArea {
+                x: 0;
+                y: 0;
+                width: parent.width - 134px;
+                height: parent.height;
+            }
+
+            menu-opener := TouchArea {
+                x: 0;
+                y: 0;
+                width: 108px;
+                height: parent.height;
+
+                clicked => {
+                    menu-area.show({ x: 0px, y: 34px });
+                }
+            }
+
+            Text {
+                x: 12px;
+                y: 0;
+                width: 90px;
+                height: parent.height;
+                text: "FlintPlayer";
+                color: #d8d8d8;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Text {
+                x: 110px;
+                y: 0;
+                width: parent.width - 110px - 110px;
+                height: parent.height;
+                text: root.bar-source;
+                color: #9a9a9a;
+                font-size: 12px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            IconButton {
+                x: parent.width - 124px;
+                y: 3px;
+                kind: 28;
+                glyph-size: 15px;
+                tint: root.pinned ? #fae100 : #c8c8c8;
+                clicked => { root.toggle-always-on-top(); }
+            }
+
+            IconButton {
+                x: parent.width - 94px;
+                y: 3px;
+                kind: 13;
+                clicked => { root.minimize-window(); }
+            }
+
+            IconButton {
+                x: parent.width - 64px;
+                y: 3px;
+                kind: 14;
+                clicked => { root.maximize-window(); }
+            }
+
+            IconButton {
+                x: parent.width - 34px;
+                y: 3px;
+                kind: 17;
+                danger-hover: true;
+                clicked => { root.close-window(); }
+            }
+        }
+
+        body := Rectangle {
+            x: 0;
+            y: root.fullscreen ? 0px : 34px;
+            width: parent.width;
+            height: parent.height - self.y;
+            background: #000000;
+
+            property <length> active-panel-x: root.fullscreen || root.panels.length <= 1 ? 0px
+                : (root.panels.length == 2 ? (root.active-index >= 1 ? self.width / 2 : 0px)
+                : Math.mod(root.active-index, 2) * (self.width / 2));
+            property <length> active-panel-y: root.fullscreen || root.panels.length <= 2 ? 0px
+                : (root.active-index >= 2 ? self.height / 2 : 0px);
+            property <length> active-panel-width: root.fullscreen || root.panels.length <= 1 ? self.width : self.width / 2;
+            property <length> active-panel-height: root.fullscreen || root.panels.length <= 2 ? self.height : self.height / 2;
+
+            for panel[i] in root.panels : CapturePanel {
+                x: root.fullscreen || root.panels.length == 1 ? 0px
+                    : (root.panels.length == 2 ? i * (parent.width / 2) : Math.mod(i, 2) * (parent.width / 2));
+                y: root.fullscreen || root.panels.length <= 2 ? 0px : (i >= 2 ? parent.height / 2 : 0px);
+                width: root.fullscreen || root.panels.length == 1 ? parent.width : parent.width / 2;
+                height: root.fullscreen || root.panels.length <= 2 ? parent.height : parent.height / 2;
+                visible: !root.fullscreen || panel.active;
+                frame: panel.frame;
+                title: panel.title;
+                fps: panel.fps;
+                running: panel.running;
+                frozen: panel.frozen;
+                active: panel.active;
+                error: panel.error;
+                chrome: !root.fullscreen && root.panels.length > 1;
+
+                picked => {
+                    keys.focus();
+                    root.panel-picked(i);
+                }
+                double-clicked => {
+                    keys.focus();
+                    root.panel-toggle-fullscreen(i);
+                }
+                close-requested => { root.panel-closed(i); }
+                right-clicked(x, y) => { menu-area.show({ x: self.x + x, y: (root.fullscreen ? 0px : 34px) + self.y + y }); }
+                activity => { root.activity(); }
+            }
+
+            Text {
+                y: (parent.height - self.height) / 2 - 24px;
+                width: parent.width;
+                text: "无信号";
+                color: #6a6a6a;
+                font-size: 20px;
+                horizontal-alignment: center;
+                visible: root.panels.length == 0;
+            }
+
+            Text {
+                y: (parent.height - self.height) / 2 + 8px;
+                width: parent.width;
+                text: "Alt+D 选择 USB 设备，Tab 显示播放信息";
+                color: #4a4a4a;
+                font-size: 12px;
+                horizontal-alignment: center;
+                visible: root.panels.length == 0;
+            }
+
+
+
+            osd := OsdTab {
+                x: 18px + parent.active-panel-x;
+                y: 18px + parent.active-panel-y;
+                width: Math.max(0px, parent.active-panel-width - 36px);
+                text-size: Math.max(11px, Math.min(30px, Math.min(parent.active-panel-height * 0.03, parent.active-panel-width / 40)));
+                visible: root.osd-visible;
+                file: root.osd-file;
+                time: root.osd-time;
+                config: root.osd-config;
+                version: root.osd-version;
+                decoder: root.osd-decoder;
+                input: root.osd-input;
+                format: root.osd-format;
+                output: root.osd-output;
+                renderer: root.osd-renderer;
+                pixel: root.osd-pixel;
+                frames: root.osd-frames;
+                frame-size: root.osd-frame-size;
+                audio: root.osd-audio;
+            }
+
+            Rectangle {
+                x: parent.active-panel-x + (parent.active-panel-width - self.width) / 2;
+                y: parent.active-panel-y + parent.active-panel-height - self.height - 72px;
+                width: Math.min(560px, parent.active-panel-width - 32px);
+                height: 38px;
+                border-radius: 6px;
+                background: #000000d0;
+                border-width: 1px;
+                border-color: #6a2a24;
+                visible: root.status-error != "";
+
+                Text {
+                    x: 12px;
+                    y: (parent.height - self.height) / 2;
+                    width: parent.width - 24px;
+                    text: root.status-error;
+                    color: #ff8b80;
+                    font-size: 12px;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                x: parent.active-panel-x + parent.active-panel-width - self.width - 16px;
+                y: parent.active-panel-y + (root.panels.length > 1 && !root.fullscreen ? 32px : 14px);
+                width: 72px;
+                height: 24px;
+                border-radius: 4px;
+                background: #000000a0;
+                visible: root.frozen;
+
+                Text {
+                    text: "已冻结";
+                    color: #fae100;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: parent.width;
+                    height: parent.height;
+                }
+            }
+
+            ControlBar {
+                x: parent.active-panel-x;
+                y: parent.active-panel-y + parent.active-panel-height - self.height;
+                width: parent.active-panel-width;
+                running: root.running;
+                frozen: root.frozen;
+                osd-visible: root.osd-visible;
+                menu-open: root.menu-open;
+                fullscreen: root.fullscreen;
+                elapsed: root.bar-elapsed;
+                codec: root.bar-codec;
+                size: root.bar-size;
+                rate: root.bar-rate;
+                bitrate: root.bar-bitrate;
+                source: root.bar-source;
+
+                toggle-menu => { root.toggle-menu(); }
+                start-requested => { root.start-requested(); }
+                stop-requested => { root.stop-requested(); }
+                previous-panel => { root.panel-prev(); }
+                next-panel => { root.panel-next(); }
+                toggle-freeze => { root.toggle-freeze(); }
+                snapshot => { root.snapshot-requested(); }
+                toggle-osd => { root.toggle-osd(); }
+                toggle-fullscreen => { root.toggle-fullscreen(); }
+                activity => { root.activity(); }
+            }
+
+            menu := DeviceMenu {
+                x: 0px;
+                y: 0px;
+                width: 300px;
+                height: parent.height;
+                visible: root.menu-open;
+                devices: root.devices;
+                resolutions: root.resolutions;
+                formats: root.formats;
+                selected-device: root.selected-device;
+                selected-resolution: root.selected-resolution;
+                selected-format: root.selected-format;
+                network-url <=> root.network-url;
+                running: root.running;
+
+                device-picked(index) => { root.device-picked(index); keys.focus(); }
+                resolution-picked(index) => { root.resolution-picked(index); keys.focus(); }
+                format-picked(index) => { root.format-picked(index); keys.focus(); }
+                refresh => { root.refresh-devices(); }
+                connect-network(url) => { root.connect-network(url); keys.focus(); }
+                start-requested => { root.start-requested(); }
+                stop-requested => { root.stop-requested(); }
+                close-requested => { root.toggle-menu(); keys.focus(); }
+            }
+        }
+    }
+    }
+}

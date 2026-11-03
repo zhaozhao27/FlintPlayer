@@ -1,0 +1,209 @@
+import { IconButton } from "icons.slint";
+
+component Chip inherits Rectangle {
+    in property <string> text: "";
+    in property <length> chip-width: 48px;
+    in property <color> text-color: #b9b9b9;
+
+    width: root.chip-width;
+    height: 16px;
+    border-radius: 2px;
+    background: #262626;
+
+    Text {
+        text: root.text;
+        color: root.text-color;
+        font-size: 10px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+        overflow: elide;
+    }
+}
+
+component Divider inherits Rectangle {
+    width: 1px;
+    height: 18px;
+    background: #1f1f1f;
+}
+
+export component ControlBar inherits Rectangle {
+    in property <bool> running: false;
+    in property <bool> frozen: false;
+    in property <bool> osd-visible: false;
+    in property <bool> menu-open: false;
+    in property <bool> fullscreen: false;
+    in property <string> elapsed: "00:00:00";
+    in property <string> codec: "";
+    in property <string> size: "";
+    in property <string> rate: "";
+    in property <string> bitrate: "";
+    in property <string> source: "";
+
+    callback toggle-menu;
+    callback start-requested;
+    callback stop-requested;
+    callback previous-panel;
+    callback next-panel;
+    callback toggle-freeze;
+    callback snapshot;
+    callback toggle-osd;
+    callback toggle-fullscreen;
+    callback activity;
+    callback right-clicked(length, length);
+
+    height: 38px;
+    background: #0e0e0e;
+    clip: true;
+
+    background-touch := TouchArea {
+        moved => { root.activity(); }
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                root.right-clicked(background-touch.mouse-x, background-touch.mouse-y);
+            }
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 2px;
+        background: root.running ? #d9c400 : #1f1f1f;
+    }
+
+    HorizontalLayout {
+        y: 2px;
+        height: parent.height - 2px;
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 0px;
+
+        IconButton {
+            kind: 0;
+            enabled: !root.running;
+            tint: #c8c8c8;
+            glyph-size: 14px;
+            button-size: 32px;
+            clicked => { root.start-requested(); }
+        }
+
+        IconButton {
+            kind: 2;
+            enabled: root.running;
+            tint: #c8c8c8;
+            glyph-size: 12px;
+            button-size: 34px;
+            clicked => { root.stop-requested(); }
+        }
+
+        Divider { }
+
+        IconButton {
+            kind: 4;
+            tint: #c8c8c8;
+            glyph-size: 14px;
+            button-size: 32px;
+            clicked => { root.previous-panel(); }
+        }
+
+        IconButton {
+            kind: 3;
+            tint: #c8c8c8;
+            glyph-size: 14px;
+            button-size: 32px;
+            clicked => { root.next-panel(); }
+        }
+
+        Divider { }
+
+        Rectangle { width: 8px; }
+
+        Text {
+            text: root.elapsed;
+            color: #c8c8c8;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+
+        Rectangle { width: 10px; }
+
+        Chip {
+            text: "LIVE";
+            chip-width: 34px;
+            text-color: root.running ? #e0453a : #6a6a6a;
+        }
+
+        Rectangle { width: 4px; }
+
+        Chip {
+            text: root.codec;
+            chip-width: 46px;
+            visible: root.codec != "";
+        }
+
+        Chip {
+            text: root.size;
+            chip-width: 74px;
+            visible: root.size != "" && root.width > 560px;
+        }
+
+        Chip {
+            text: root.rate;
+            chip-width: 52px;
+            visible: root.rate != "" && root.width > 650px;
+        }
+
+        Chip {
+            text: root.bitrate;
+            chip-width: 62px;
+            visible: root.bitrate != "" && root.width > 740px;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        IconButton {
+            kind: root.frozen ? 0 : 1;
+            enabled: root.running;
+            tint: root.frozen ? #fae100 : #c8c8c8;
+            glyph-size: 13px;
+            button-size: 30px;
+            clicked => { root.toggle-freeze(); }
+        }
+
+        IconButton {
+            kind: 21;
+            enabled: root.running;
+            tint: #c8c8c8;
+            glyph-size: 14px;
+            button-size: 30px;
+            clicked => { root.snapshot(); }
+        }
+
+        IconButton {
+            kind: 20;
+            tint: root.osd-visible ? #fae100 : #c8c8c8;
+            glyph-size: 14px;
+            button-size: 30px;
+            clicked => { root.toggle-osd(); }
+        }
+
+        IconButton {
+            kind: 16;
+            tint: root.fullscreen ? #fae100 : #c8c8c8;
+            glyph-size: 14px;
+            button-size: 30px;
+            clicked => { root.toggle-fullscreen(); }
+        }
+
+        IconButton {
+            kind: 9;
+            tint: #c8c8c8;
+            glyph-size: 14px;
+            button-size: 30px;
+            clicked => { root.toggle-menu(); }
+        }
+    }
+}

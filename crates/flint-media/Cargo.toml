@@ -1,0 +1,16 @@
+[package]
+name = "flint-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Low-latency V4L2 / network stream capture and decoding for FlintPlayer"
+
+[dependencies]
+flint-core.workspace = true
+ffmpeg-next.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+libc.workspace = true
+log.workspace = true

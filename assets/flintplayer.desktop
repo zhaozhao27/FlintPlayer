@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=FlintPlayer
+GenericName=USB Video Capture
+Comment=High-performance USB stream & media player
+Exec=flintplayer %U
+Icon=flintplayer
+Terminal=false
+Categories=AudioVideo;Player;Video;
+MimeType=video/mp4;video/x-matroska;video/x-flv;video/webm;video/quicktime;audio/mpeg;
+StartupWMClass=flintplayer

@@ -1,0 +1,11 @@
+[package]
+name = "flint-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Device discovery, statistics and configuration for FlintPlayer"
+
+[dependencies]
+dirs.workspace = true
+libc.workspace = true

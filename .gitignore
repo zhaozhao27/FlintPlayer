@@ -1,0 +1,89 @@
+# 迁移前仓库根的规则（ZRT-VERA/ 整体上移到根时合过来的，别删）
+*.o
+tags
+cscope.*
+_release
+
+# 树外内核模块（imu/* 那几条 recipe）就地编出来的中间物。
+# 上面那条 `*.o` 只盖住了 .o，kbuild 还会留下这些，不忽略的话
+# recipe 目录里会混进一堆编译产物。
+*.ko
+.*.cmd
+*.mod.c
+modules.order
+.tmp_versions/
+
+# LibreOffice 打开原理图时留的锁文件
+.~lock.*#
+
+recipes_prefer
+/build/
+/prefix/
+.config
+**/my_*
+# Local settings folder for Jetbrains products (RustRover, IntelliJ, CLion)
+.idea/
+# Local settings folder for Visual Studio Professional
+.vs/
+# Local settings folder for vscode
+.vscode/
+# Local settings folder for the devcontainer extension that most IDEs support.
+.devcontainer/
+
+/repo
+source
+source.tmp
+source-new
+source.tar
+source.tar.tmp
+target
+
+# 本地源码缓存（clone 仓库的 tar.gz 快照）
+/src/local-src/
+
+.claude
+CLAUDE.md
+.config.toml
+.opensource_paths
+
+Cargo.lock
+
+# For MacOS
+._*
+
+# Agent
+.omx/
+.codex/
+.codex*
+# 这几个是各 agent 自己的配置目录 —— 本工程**不建**它们，只在它已经存在时
+# 往里建 skills/ 放软链（recipes/skills 那条 recipe）。里面没有属于本工程的
+# 内容，整个不进版本库（见 doc/zrt-vera-adb-design.md 第 7 节）。
+.agents/
+.cursor/
+.gemini/
+.opencode/
+customers
+
+# 工作区层：从平台派生出来的本地项目，与 customers 同理，不进版本库
+/workspaces/
+/.git-bak/
+
+# 文档流水线产物：源只维护 markdown/，doc/zh、doc/en、pdf/ 都可重建（见 DOCS.md）
+/doc/zh/
+/doc/en/
+/pdf/
+/tools/intermediate/
+/tools/skills/**/__pycache__/
+
+/tmp
+
+AGENTS.md
+CLAUDE.md
+/.git_bak/
+**/.omc/
+*.h265
+*.raw16
+*.log
+stream-*-frames/
+*.patch.out
+kern-snap-*.txt
