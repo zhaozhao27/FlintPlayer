@@ -1,7 +1,7 @@
 use crate::capture_stream::{self, StreamSource};
 use crate::capture_v4l2::{CaptureCodec, RawFormat, V4l2Stream};
 use crate::latest_slot::Frame;
-use crate::{CaptureSettings, Shared, SourceInfo};
+use crate::{CaptureSettings, CaptureSmoothing, Shared, SourceInfo};
 use crossbeam_channel::Sender;
 use ffmpeg::codec::decoder::Video as VideoDecoder;
 use ffmpeg::format::Pixel;
@@ -14,6 +14,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(120);
+const PAUSE_POLL: Duration = Duration::from_millis(15);
 const MAX_DECODE_FAILURES: u32 = 30;
 const FAILURE_WINDOW: Duration = Duration::from_secs(2);
 const MAX_SEND_ATTEMPTS: u32 = 3;
@@ -29,7 +30,7 @@ pub fn spawn(
 
 enum Pipeline {
     Device(V4l2Stream),
-    Stream(StreamSource),
+    Stream(Box<StreamSource>),
 }
 
 fn run(
@@ -38,7 +39,7 @@ fn run(
     settings: CaptureSettings,
     ready: Sender<Result<SourceInfo, String>>,
 ) {
-    let mut converter = Converter::new();
+    let mut converter = Converter::new(settings.smoothing);
     let opened = open_pipeline(&source, &settings, &shared);
     let mut pipeline = match opened {
         Ok((pipeline, info)) => {
@@ -55,6 +56,7 @@ fn run(
     };
 
     let mut decode_budget = DecodeBudget::new();
+    let mut ended = false;
     let error = loop {
         if shared.should_stop() {
             break None;
@@ -68,9 +70,22 @@ fn run(
             }
         };
         match outcome {
-            Ok(()) => {}
+            Ok(()) => {
+                ended = false;
+            }
             Err(error) => {
-                break if shared.should_stop() { None } else { Some(error) };
+                if shared.should_stop() {
+                    break None;
+                }
+                if matches!(&pipeline, Pipeline::Stream(_)) && error == crate::EOF_ERROR {
+                    if !ended {
+                        ended = true;
+                        shared.finish(Some(error));
+                    }
+                    thread::sleep(PAUSE_POLL);
+                } else {
+                    break Some(error);
+                }
             }
         }
     };
@@ -103,26 +118,29 @@ fn open_pipeline(
             height: device.height(),
             pixel_format: device.fourcc().to_string(),
             nominal_fps: device.fps(),
+            duration: 0.0,
+            audio_tracks: Vec::new(),
         };
         Ok((Pipeline::Device(device), info))
     } else {
-        let stream = capture_stream::open(
-            source,
-            settings.width,
-            settings.height,
-            settings.fps,
-            Arc::clone(shared),
-        )?;
+        let stream = capture_stream::open(source, settings, Arc::clone(shared))?;
+        let transport = if capture_stream::is_screen(source) {
+            "X11"
+        } else {
+            "Stream"
+        };
         let info = SourceInfo {
             source: source.to_string(),
-            transport: "Stream".into(),
+            transport: transport.into(),
             codec: stream.info.codec.clone(),
             width: stream.info.width,
             height: stream.info.height,
             pixel_format: stream.info.pixel_format.clone(),
             nominal_fps: stream.info.nominal_fps,
+            duration: stream.duration,
+            audio_tracks: stream.info.audio_tracks.clone(),
         };
-        Ok((Pipeline::Stream(stream), info))
+        Ok((Pipeline::Stream(Box::new(stream)), info))
     }
 }
 
@@ -171,23 +189,93 @@ fn pump_stream(
     if shared.should_stop() {
         return Ok(());
     }
+    handle_external_audio_request(stream, shared);
+    let requested = shared.audio_track();
+    let output_rate = shared.audio_output_rate();
+    let output_format = shared.audio_output_format();
+    let output_device = shared.audio_device();
+    let output_device2 = shared.audio_device2();
+    let output_passthrough = shared.audio_passthrough_device();
+    let output_method = shared.audio_output_method();
+    let stale = stream.audio.as_ref().is_some_and(|track| {
+        track.rate != output_rate
+            || track.format != output_format
+            || track.device != output_device
+            || track.device2 != output_device2
+            || track.passthrough != output_passthrough
+            || track.method != output_method
+    });
+    if requested != stream.active_audio || stale {
+        if stream.external_audio.is_some() {
+            stream.audio = None;
+            stream.active_audio = None;
+        } else {
+            let (audio, active) = match capture_stream::open_audio(
+                &stream.input,
+                requested,
+                capture_stream::AudioOutputConfig {
+                    rate: output_rate,
+                    format: output_format,
+                    device: output_device,
+                    device2: output_device2,
+                    passthrough: output_passthrough,
+                    method: output_method,
+                },
+            ) {
+                Some((track, ordinal)) => (Some(track), Some(ordinal)),
+                None => (None, None),
+            };
+            stream.audio = audio;
+            stream.active_audio = active;
+            shared.set_audio_track(active);
+        }
+    }
+    if let Some(target) = shared.take_seek() {
+        seek_to(stream, target)?;
+        decode_until(stream, converter, failures, shared, target)?;
+        shared.note_last_pts(target);
+        return Ok(());
+    }
+    if shared.paused() {
+        let steps = shared.take_steps();
+        if steps == 0 {
+            thread::sleep(PAUSE_POLL);
+            return Ok(());
+        }
+        stream.clock = None;
+        return decode_steps(stream, converter, failures, shared, steps);
+    }
+    pump_external_audio(stream, shared)?;
     let Some((_, packet)) = stream.input.packets().next() else {
         if shared.should_stop() {
             return Ok(());
         }
-        return Err("输入流已结束".to_string());
+        return Err(crate::EOF_ERROR.to_string());
     };
     if packet.stream() != stream.stream_index {
+        if stream.external_audio.is_none() {
+            if let Some(audio) = stream.audio.as_mut() {
+                if packet.stream() == audio.stream_index {
+                    if let Some(data) = packet.data() {
+                        let mut options = shared.audio_options();
+                        if (shared.speed() - 1.0).abs() >= f32::EPSILON {
+                            options.gain = 0.0;
+                        }
+                        audio.push(data, options, shared)?;
+                    }
+                }
+            }
+        }
         return Ok(());
     }
     let Some(data) = packet.data() else {
         return Ok(());
     };
     let captured_at = Instant::now();
-    let pts = packet
-        .pts()
-        .map(|value| value as f64 * stream.time_base)
-        .unwrap_or(0.0);
+    let pts = packet_pts(&packet, stream.time_base);
+    if stream.local {
+        pace(stream, pts, shared);
+    }
     shared.stats.record_bytes(captured_at, data.len() as u64);
     let packet = ffmpeg::Packet::copy(data);
     submit_packet(
@@ -199,6 +287,276 @@ fn pump_stream(
         captured_at,
         pts,
     )
+}
+
+fn decode_steps(
+    stream: &mut StreamSource,
+    converter: &mut Converter,
+    failures: &mut DecodeBudget,
+    shared: &Shared,
+    steps: i32,
+) -> Result<(), String> {
+    let target = steps.unsigned_abs() as u64;
+    if steps < 0 {
+        let back = target as f64 * stream.frame_duration;
+        let target_pts = (shared.last_pts() - back).max(0.0);
+        seek_back(stream, target_pts)?;
+        return decode_until(stream, converter, failures, shared, target_pts);
+    }
+    let start_frames = shared.stats_snapshot().frames;
+    let mut packets = 0u64;
+    let limit = target * 8 + 8;
+    while shared.stats_snapshot().frames.saturating_sub(start_frames) < target {
+        if shared.should_stop() {
+            return Ok(());
+        }
+        packets += 1;
+        if packets > limit {
+            break;
+        }
+        let Some((_, packet)) = stream.input.packets().next() else {
+            shared.set_paused(false);
+            return Err(crate::EOF_ERROR.to_string());
+        };
+        if packet.stream() != stream.stream_index {
+            continue;
+        }
+        let Some(data) = packet.data() else {
+            continue;
+        };
+        let captured_at = Instant::now();
+        let pts = packet_pts(&packet, stream.time_base);
+        shared.stats.record_bytes(captured_at, data.len() as u64);
+        let packet = ffmpeg::Packet::copy(data);
+        submit_packet(
+            &mut stream.decoder,
+            converter,
+            failures,
+            shared,
+            &packet,
+            captured_at,
+            pts,
+        )?;
+    }
+    Ok(())
+}
+
+fn seek_to(stream: &mut StreamSource, seconds: f64) -> Result<(), String> {
+    let timestamp = (seconds.max(0.0) * f64::from(ffmpeg::ffi::AV_TIME_BASE)) as i64;
+    stream
+        .input
+        .seek(timestamp, ..)
+        .map_err(|error| format!("定位视频失败：{error}"))?;
+    stream.decoder.flush();
+    stream.clock = None;
+    if let Some(audio) = stream.audio.as_mut() {
+        audio.flush();
+    }
+    seek_external_audio(stream, seconds);
+    Ok(())
+}
+
+fn seek_back(stream: &mut StreamSource, target: f64) -> Result<(), String> {
+    let timestamp = (target.max(0.0) * f64::from(ffmpeg::ffi::AV_TIME_BASE)) as i64;
+    stream
+        .input
+        .seek(timestamp, ..)
+        .map_err(|error| format!("定位视频帧失败：{error}"))?;
+    stream.decoder.flush();
+    if let Some(audio) = stream.audio.as_mut() {
+        audio.flush();
+    }
+    seek_external_audio(stream, target);
+    Ok(())
+}
+
+fn seek_external_audio(stream: &mut StreamSource, seconds: f64) {
+    let Some(external) = stream.external_audio.as_mut() else {
+        return;
+    };
+    let timestamp = (seconds.max(0.0) * f64::from(ffmpeg::ffi::AV_TIME_BASE)) as i64;
+    if external.input.seek(timestamp, ..).is_err() {
+        log::warn!("外部音频定位失败：{seconds:.2} 秒");
+    }
+    external.track.flush();
+    external.next_pts = seconds.max(0.0);
+}
+
+const EXTERNAL_AUDIO_LOOKAHEAD: f64 = 0.25;
+
+fn handle_external_audio_request(stream: &mut StreamSource, shared: &Shared) {
+    let Some(request) = shared.take_external_audio_request() else {
+        return;
+    };
+    if request.is_empty() {
+        if stream.external_audio.take().is_some() {
+            stream.audio = None;
+            stream.active_audio = None;
+            shared.set_external_audio_label(None);
+            shared.push_external_audio_notice("已恢复内置音频".to_string());
+        }
+        return;
+    }
+    stream.audio = None;
+    stream.active_audio = None;
+    match open_external_audio(&request, shared, shared.last_pts()) {
+        Some(external) => {
+            let label = Path::new(&request)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| request.clone());
+            stream.external_audio = Some(external);
+            shared.set_external_audio_label(Some(label.clone()));
+            shared.push_external_audio_notice(format!("已载入外部音频：{label}"));
+        }
+        None => {
+            shared.set_external_audio_label(None);
+            shared.push_external_audio_notice(format!("无法载入外部音频：{request}"));
+        }
+    }
+}
+
+fn open_external_audio(
+    path: &str,
+    shared: &Shared,
+    start: f64,
+) -> Option<capture_stream::ExternalAudio> {
+    let mut input = ffmpeg::format::input(&Path::new(path)).ok()?;
+    let (stream_index, time_base) = {
+        let stream = input.streams().best(ffmpeg::media::Type::Audio)?;
+        (stream.index(), f64::from(stream.time_base()))
+    };
+    let (track, _) = capture_stream::open_audio(
+        &input,
+        None,
+        capture_stream::AudioOutputConfig {
+            rate: shared.audio_output_rate(),
+            format: shared.audio_output_format(),
+            device: shared.audio_device(),
+            device2: shared.audio_device2(),
+            passthrough: shared.audio_passthrough_device(),
+            method: shared.audio_output_method(),
+        },
+    )?;
+    let timestamp = (start.max(0.0) * f64::from(ffmpeg::ffi::AV_TIME_BASE)) as i64;
+    let _ = input.seek(timestamp, ..);
+    Some(capture_stream::ExternalAudio {
+        input,
+        track,
+        stream_index,
+        time_base,
+        next_pts: start.max(0.0),
+    })
+}
+
+fn pump_external_audio(stream: &mut StreamSource, shared: &Shared) -> Result<(), String> {
+    let video_pts = shared.last_pts();
+    let Some(external) = stream.external_audio.as_mut() else {
+        return Ok(());
+    };
+    let mut budget = 0;
+    while external.next_pts <= video_pts + EXTERNAL_AUDIO_LOOKAHEAD && budget < 512 {
+        let Some((_, packet)) = external.input.packets().next() else {
+            break;
+        };
+        budget += 1;
+        if packet.stream() != external.stream_index {
+            continue;
+        }
+        let Some(data) = packet.data() else {
+            continue;
+        };
+        external.next_pts = packet_pts(&packet, external.time_base);
+        let mut options = shared.audio_options();
+        if (shared.speed() - 1.0).abs() >= f32::EPSILON {
+            options.gain = 0.0;
+        }
+        external.track.push(data, options, shared)?;
+    }
+    Ok(())
+}
+
+// Demuxer seeks land on the preceding keyframe; decoding forward reproduces
+// PotPlayer's accurate seek and single-frame stepping.
+fn decode_until(
+    stream: &mut StreamSource,
+    converter: &mut Converter,
+    failures: &mut DecodeBudget,
+    shared: &Shared,
+    target: f64,
+) -> Result<(), String> {
+    const MAX_SEEK_PACKETS: u64 = 8192;
+    let tolerance = stream.frame_duration * 0.5;
+    let mut published = f64::NEG_INFINITY;
+    let mut packets = 0u64;
+    while published + tolerance < target {
+        if shared.should_stop() {
+            return Ok(());
+        }
+        packets += 1;
+        if packets > MAX_SEEK_PACKETS {
+            break;
+        }
+        let Some((_, packet)) = stream.input.packets().next() else {
+            return Ok(());
+        };
+        if packet.stream() != stream.stream_index {
+            continue;
+        }
+        let Some(data) = packet.data() else {
+            continue;
+        };
+        let captured_at = Instant::now();
+        let pts = packet_pts(&packet, stream.time_base);
+        let frames_before = shared.stats_snapshot().frames;
+        shared.stats.record_bytes(captured_at, data.len() as u64);
+        let packet = ffmpeg::Packet::copy(data);
+        submit_packet(
+            &mut stream.decoder,
+            converter,
+            failures,
+            shared,
+            &packet,
+            captured_at,
+            pts,
+        )?;
+        if shared.stats_snapshot().frames > frames_before {
+            published = shared.last_pts();
+        } else if shared.last_pts() > published {
+            published = shared.last_pts();
+        }
+    }
+    Ok(())
+}
+
+fn pace(stream: &mut StreamSource, pts: f64, shared: &Shared) {
+    const MAX_SLEEP: Duration = Duration::from_millis(100);
+    let speed = shared.speed().clamp(0.1, 4.0);
+    let (anchor_at, anchor_pts, anchor_speed) =
+        *stream.clock.get_or_insert((Instant::now(), pts, speed));
+    if pts < anchor_pts || (speed - anchor_speed).abs() > f32::EPSILON {
+        stream.clock = Some((Instant::now(), pts, speed));
+        return;
+    }
+    let Some(wait) = (anchor_at + Duration::from_secs_f64((pts - anchor_pts) / f64::from(speed)))
+        .checked_duration_since(Instant::now())
+    else {
+        return;
+    };
+    let deadline = Instant::now() + wait.min(MAX_SLEEP);
+    while Instant::now() < deadline {
+        if shared.should_stop() || shared.paused() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn packet_pts(packet: &ffmpeg::Packet, time_base: f64) -> f64 {
+    packet
+        .pts()
+        .map(|value| value as f64 * time_base)
+        .unwrap_or(0.0)
 }
 
 #[derive(Clone, Copy)]
@@ -248,7 +606,8 @@ impl DecodeBudget {
 struct Converter {
     decoder: Option<VideoDecoder>,
     scaler: Option<scaling::Context>,
-    scaler_key: Option<(Pixel, u32, u32)>,
+    scaler_key: Option<(Pixel, u32, u32, scaling::Flags)>,
+    scaler_flags: scaling::Flags,
     output: Option<RawVideoFrame>,
     raw: Option<RawVideoFrame>,
     spare: Vec<u8>,
@@ -256,11 +615,12 @@ struct Converter {
 }
 
 impl Converter {
-    fn new() -> Self {
+    fn new(smoothing: CaptureSmoothing) -> Self {
         Self {
             decoder: None,
             scaler: None,
             scaler_key: None,
+            scaler_flags: smoothing_flags(smoothing),
             output: None,
             raw: None,
             spare: Vec::new(),
@@ -314,8 +674,7 @@ impl Converter {
                     .decoder
                     .take()
                     .ok_or_else(|| "解码器未初始化".to_string())?;
-                let result =
-                    self.feed_compressed(&mut decoder, data, captured_at, pts, state);
+                let result = self.feed_compressed(&mut decoder, data, captured_at, pts, state);
                 self.decoder = Some(decoder);
                 result
             }
@@ -392,6 +751,10 @@ impl Converter {
         if width == 0 || height == 0 {
             return Ok(());
         }
+        if shared.video_renderer_null() {
+            shared.note_last_pts(pts);
+            return Ok(());
+        }
         if self.reported_format != Some(frame.format()) {
             self.reported_format = Some(frame.format());
             let name = frame
@@ -442,7 +805,7 @@ impl Converter {
     }
 
     fn ensure_scaler(&mut self, format: Pixel, width: u32, height: u32) -> Result<(), String> {
-        let key = (format, width, height);
+        let key = (format, width, height, self.scaler_flags);
         if self.scaler_key == Some(key) && self.scaler.is_some() {
             return Ok(());
         }
@@ -453,13 +816,24 @@ impl Converter {
             Pixel::RGBA,
             width,
             height,
-            scaling::Flags::BILINEAR,
+            self.scaler_flags,
         )
         .map_err(|error| format!("创建 RGBA 缩放器失败：{error}"))?;
         self.scaler = Some(scaler);
         self.output = Some(RawVideoFrame::new(Pixel::RGBA, width, height));
         self.scaler_key = Some(key);
         Ok(())
+    }
+}
+
+fn smoothing_flags(smoothing: CaptureSmoothing) -> scaling::Flags {
+    match smoothing {
+        CaptureSmoothing::None => scaling::Flags::POINT,
+        CaptureSmoothing::System => scaling::Flags::empty(),
+        CaptureSmoothing::Low => scaling::Flags::FAST_BILINEAR,
+        CaptureSmoothing::Normal => scaling::Flags::BILINEAR,
+        CaptureSmoothing::Medium => scaling::Flags::BICUBIC,
+        CaptureSmoothing::High => scaling::Flags::LANCZOS,
     }
 }
 
@@ -472,6 +846,10 @@ fn submit_packet(
     captured_at: Instant,
     pts: f64,
 ) -> Result<(), String> {
+    if shared.video_renderer_compressed() {
+        shared.note_last_pts(pts);
+        return Ok(());
+    }
     let started = Instant::now();
     let mut delivered = false;
     for _ in 0..MAX_SEND_ATTEMPTS {
@@ -483,7 +861,15 @@ fn submit_packet(
             // FFmpeg only accepts a packet after pending output has been received,
             // so EAGAIN here means "drain, then resubmit", never "drop and return".
             Err(error) if is_eagain(&error) => {
-                drain_frames(decoder, converter, failures, shared, captured_at, pts, started)?;
+                drain_frames(
+                    decoder,
+                    converter,
+                    failures,
+                    shared,
+                    captured_at,
+                    pts,
+                    started,
+                )?;
             }
             Err(error) => {
                 return record_decode_failure(
@@ -496,7 +882,15 @@ fn submit_packet(
     if !delivered {
         return record_decode_failure(failures, "解码器持续拒绝数据".to_string());
     }
-    drain_frames(decoder, converter, failures, shared, captured_at, pts, started)
+    drain_frames(
+        decoder,
+        converter,
+        failures,
+        shared,
+        captured_at,
+        pts,
+        started,
+    )
 }
 
 fn drain_frames(
@@ -564,11 +958,7 @@ fn fill_raw_frame(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
-    let stride = if stride == 0 {
-        frame.stride(0)
-    } else {
-        stride
-    };
+    let stride = if stride == 0 { frame.stride(0) } else { stride };
     match raw {
         RawFormat::Nv12 => {
             let uv_offset = stride

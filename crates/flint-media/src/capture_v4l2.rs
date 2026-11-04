@@ -290,7 +290,11 @@ impl V4l2Stream {
             )
         };
         if fd < 0 {
-            return Err(format!("无法打开 {}：{}", path.display(), std::io::Error::last_os_error()));
+            return Err(format!(
+                "无法打开 {}：{}",
+                path.display(),
+                std::io::Error::last_os_error()
+            ));
         }
         let fd = Fd(fd);
 
@@ -398,7 +402,10 @@ impl V4l2Stream {
                 )
             };
             if pointer == libc::MAP_FAILED {
-                return Err(format!("映射采集缓冲区失败：{}", std::io::Error::last_os_error()));
+                return Err(format!(
+                    "映射采集缓冲区失败：{}",
+                    std::io::Error::last_os_error()
+                ));
             }
             mappings.push(Mapping {
                 ptr: pointer.cast(),
@@ -579,8 +586,7 @@ fn choose_format(
     info.formats
         .iter()
         .filter_map(|format| {
-            CaptureCodec::classify(&format.fourcc)
-                .map(|codec| (format.fourcc.clone(), codec))
+            CaptureCodec::classify(&format.fourcc).map(|codec| (format.fourcc.clone(), codec))
         })
         .min_by_key(|(_, codec)| codec.rank())
         .ok_or_else(|| format!("{} 没有可用的视频格式", info.path.display()))
@@ -617,7 +623,10 @@ mod tests {
             CaptureCodec::classify("YUYV"),
             Some(CaptureCodec::Raw(RawFormat::Yuyv422))
         );
-        assert_eq!(CaptureCodec::classify("NV12"), Some(CaptureCodec::Raw(RawFormat::Nv12)));
+        assert_eq!(
+            CaptureCodec::classify("NV12"),
+            Some(CaptureCodec::Raw(RawFormat::Nv12))
+        );
         assert!(CaptureCodec::classify("HEVC").unwrap().is_compressed());
         assert!(CaptureCodec::classify("XXXX").is_none());
     }
@@ -634,9 +643,18 @@ mod tests {
     #[test]
     fn picks_nearest_resolution() {
         let sizes = vec![
-            device::Resolution { width: 640, height: 480 },
-            device::Resolution { width: 1280, height: 720 },
-            device::Resolution { width: 1920, height: 1080 },
+            device::Resolution {
+                width: 640,
+                height: 480,
+            },
+            device::Resolution {
+                width: 1280,
+                height: 720,
+            },
+            device::Resolution {
+                width: 1920,
+                height: 1080,
+            },
         ];
         assert_eq!(choose_size(&sizes, 1300, 700), (1280, 720));
         assert_eq!(choose_size(&sizes, 0, 0), (1280, 720));

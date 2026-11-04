@@ -1,0 +1,137 @@
+import { Translation } from "translation.slint";
+
+component DlgButton inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> primary: false;
+    callback clicked;
+
+    height: 23px;
+    background: root.primary ? (ta.has-hover ? #d8ecff : #e7f3ff) : (ta.has-hover ? #e6e6e6 : #f4f4f4);
+    border-width: 1px;
+    border-color: #8f8f8f;
+    border-radius: 2px;
+
+    Text {
+        text: root.label;
+        color: #1a1a1a;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NetworkDialog inherits Rectangle {
+    in property <bool> active: false;
+    in-out property <string> url: "";
+    callback accepted(string);
+    callback close;
+
+    width: 480px;
+    height: 150px;
+    background: #f0f0f0;
+    border-width: 1px;
+    border-color: #6a6a6a;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 28px;
+        background: #1f1f1f;
+
+        Text {
+            x: 10px;
+            y: 0;
+            width: parent.width - 50px;
+            height: parent.height;
+            text: Translation.tr("打开链接", Translation.language-gen);
+            color: #eeeeee;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            x: parent.width - 30px;
+            y: 0;
+            width: 20px;
+            height: parent.height;
+            text: "✕";
+            color: #d0d0d0;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        close-touch := TouchArea {
+            x: parent.width - 40px;
+            width: 40px;
+            clicked => { root.close(); }
+        }
+    }
+
+    TouchArea {
+        y: 28px;
+        height: parent.height - 28px;
+        clicked => { }
+    }
+
+    Text {
+        x: 16px;
+        y: 44px;
+        width: 100px;
+        height: 20px;
+        text: Translation.tr("链接地址：", Translation.language-gen);
+        color: #1a1a1a;
+        font-size: 11px;
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 16px;
+        y: 68px;
+        width: parent.width - 32px;
+        height: 24px;
+        background: #ffffff;
+        border-width: 1px;
+        border-color: #8f8f8f;
+
+        url-edit := TextInput {
+            x: 4px;
+            width: parent.width - 8px;
+            height: parent.height;
+            text: root.url;
+            font-size: 11px;
+            color: #1a1a1a;
+            single-line: true;
+            edited => { root.url = url-edit.text; }
+            accepted => { root.accepted(url-edit.text); }
+        }
+    }
+
+    changed active => {
+        if (self.active) {
+            url-edit.focus();
+        }
+    }
+
+    DlgButton {
+        x: parent.width - 188px;
+        y: parent.height - 36px;
+        width: 80px;
+        label: Translation.tr("打开", Translation.language-gen);
+        primary: true;
+        clicked => { root.accepted(root.url); }
+    }
+
+    DlgButton {
+        x: parent.width - 92px;
+        y: parent.height - 36px;
+        width: 76px;
+        label: Translation.tr("取消", Translation.language-gen);
+        clicked => { root.close(); }
+    }
+}

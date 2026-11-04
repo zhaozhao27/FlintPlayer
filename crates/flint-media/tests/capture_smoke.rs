@@ -8,6 +8,9 @@ fn settings(width: u32, height: u32) -> CaptureSettings {
         height,
         fps: 30,
         fourcc: Some("MJPG".into()),
+        input_format: None,
+        pixel_format: None,
+        smoothing: Default::default(),
     }
 }
 
@@ -42,7 +45,10 @@ fn captures_and_decodes_live_frames() {
     }
     let frame = frame.expect("no frame produced within five seconds");
     assert_eq!(frame.rgba.len(), frame.width * frame.height * 4);
-    assert!(frame.rgba.chunks_exact(4).any(|pixel| pixel[..3] != [0, 0, 0]));
+    assert!(frame
+        .rgba
+        .chunks_exact(4)
+        .any(|pixel| pixel[..3] != [0, 0, 0]));
 
     let snapshot = engine.shared().stats_snapshot();
     assert!(snapshot.frames > 0);

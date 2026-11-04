@@ -94,7 +94,11 @@ fn open_device(path: &Path) -> Result<Fd, String> {
         )
     };
     if fd < 0 {
-        return Err(format!("无法打开 {}：{}", path.display(), std::io::Error::last_os_error()));
+        return Err(format!(
+            "无法打开 {}：{}",
+            path.display(),
+            std::io::Error::last_os_error()
+        ));
     }
     Ok(Fd(fd))
 }
@@ -109,7 +113,10 @@ fn ioctl<T>(fd: RawFd, request: libc::c_ulong, value: &mut T) -> Result<(), Stri
 }
 
 fn bytes_to_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..end]).trim().to_string()
 }
 
@@ -183,7 +190,9 @@ pub fn scan_devices() -> Vec<DeviceInfo> {
                 .and_then(|name| name.to_str())
                 .map(|name| {
                     name.strip_prefix("video")
-                        .map(|digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
+                        .map(|digits| {
+                            !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+                        })
                         .unwrap_or(false)
                 })
                 .unwrap_or(false)
@@ -211,7 +220,9 @@ pub fn resolutions(path: &Path, fourcc: &str) -> Vec<Resolution> {
         .iter()
         .copied()
         .enumerate()
-        .fold(0u32, |acc, (index, byte)| acc | (byte as u32) << (index * 8));
+        .fold(0u32, |acc, (index, byte)| {
+            acc | (byte as u32) << (index * 8)
+        });
 
     let mut result = Vec::new();
     for index in 0..64u32 {
@@ -227,11 +238,11 @@ pub fn resolutions(path: &Path, fourcc: &str) -> Vec<Resolution> {
         }
         let values = size.size.data;
         match size.type_ {
-            0 => result.push(Resolution {
+            1 => result.push(Resolution {
                 width: values[0],
                 height: values[1],
             }),
-            1 => {
+            2 | 3 => {
                 let (min_width, max_width, min_height, max_height) =
                     (values[0], values[1], values[3], values[4]);
                 for (width, height) in [(640, 480), (1280, 720), (1920, 1080), (3840, 2160)] {

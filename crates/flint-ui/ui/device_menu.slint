@@ -1,5 +1,6 @@
 import { Palette } from "theme.slint";
 import { ScrollView, LineEdit } from "std-widgets.slint";
+import { Translation } from "translation.slint";
 
 export struct DeviceEntry {
     title: string,
@@ -110,7 +111,7 @@ export component DeviceMenu inherits Rectangle {
                     y: 0;
                     width: parent.width - 60px;
                     height: parent.height;
-                    text: "设备";
+                    text: Translation.tr("设备", Translation.language-gen);
                     color: #fae100;
                     font-size: 14px;
                     font-weight: 600;
@@ -120,7 +121,7 @@ export component DeviceMenu inherits Rectangle {
                 MenuButton {
                     x: parent.width - 78px;
                     y: 2px;
-                    label: "刷新";
+                    label: Translation.tr("刷新", Translation.language-gen);
                     clicked => { root.refresh(); }
                 }
             }
@@ -137,7 +138,7 @@ export component DeviceMenu inherits Rectangle {
                     spacing: 4px;
 
                     Text {
-                        text: "采集设备";
+                        text: Translation.tr("采集设备", Translation.language-gen);
                         color: #7a7a7a;
                         font-size: 11px;
                         visible: !root.network-mode;
@@ -183,13 +184,13 @@ export component DeviceMenu inherits Rectangle {
                     }
 
                     if !root.network-mode && root.devices.length == 0 : Text {
-                        text: "无可用采集设备";
+                        text: Translation.tr("无可用采集设备", Translation.language-gen);
                         color: #6f6f6f;
                         font-size: 11px;
                     }
 
                     if !root.network-mode && root.selected-device >= 0 : Text {
-                        text: "分辨率";
+                        text: Translation.tr("分辨率", Translation.language-gen);
                         color: #7a7a7a;
                         font-size: 11px;
                     }
@@ -214,7 +215,7 @@ export component DeviceMenu inherits Rectangle {
                     }
 
                     if !root.network-mode && root.selected-device >= 0 && root.formats.length > 0 : Text {
-                        text: "格式";
+                        text: Translation.tr("格式", Translation.language-gen);
                         color: #7a7a7a;
                         font-size: 11px;
                     }
@@ -243,7 +244,7 @@ export component DeviceMenu inherits Rectangle {
                         spacing: 6px;
 
                         Text {
-                            text: "网络流";
+                            text: Translation.tr("网络流", Translation.language-gen);
                             color: #7a7a7a;
                             font-size: 11px;
                         }
@@ -256,7 +257,7 @@ export component DeviceMenu inherits Rectangle {
                         }
 
                         MenuButton {
-                            label: "连接";
+                            label: Translation.tr("连接", Translation.language-gen);
                             clicked => { root.connect-network(root.network-url); }
                         }
                     }
@@ -272,7 +273,7 @@ export component DeviceMenu inherits Rectangle {
                 spacing: 6px;
 
                 MenuButton {
-                    label: root.running ? "停止" : "启动";
+                    label: root.running ? Translation.tr("停止", Translation.language-gen) : Translation.tr("启动", Translation.language-gen);
                     primary: !root.running;
                     clicked => {
                         if (root.running) {
@@ -286,7 +287,7 @@ export component DeviceMenu inherits Rectangle {
                 Rectangle { horizontal-stretch: 1; }
 
                 MenuButton {
-                    label: "关闭";
+                    label: Translation.tr("关闭", Translation.language-gen);
                     clicked => { root.close-requested(); }
                 }
             }
@@ -302,13 +303,13 @@ export component DeviceMenu inherits Rectangle {
                 spacing: 0px;
 
                 SideTab {
-                    label: "设\n备";
+                    label: Translation.tr("设\n备", Translation.language-gen);
                     active: !root.network-mode;
                     clicked => { root.network-mode = false; }
                 }
 
                 SideTab {
-                    label: "网\n络";
+                    label: Translation.tr("网\n络", Translation.language-gen);
                     active: root.network-mode;
                     clicked => { root.network-mode = true; url-edit.focus(); }
                 }

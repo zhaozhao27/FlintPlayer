@@ -1,3 +1,4 @@
+import { Translation } from "translation.slint";
 export struct OsdToken {
     text: string,
     tone: int,
@@ -140,24 +141,24 @@ export component OsdTab inherits Rectangle {
         spacing: 0px;
         alignment: start;
 
-        OsdField { label: "文件名:"; tokens: root.file; text-size: root.text-size; }
-        OsdField { label: "当前时间:"; tokens: root.time; text-size: root.text-size; }
-        OsdField { label: "当前配置:"; tokens: root.config; text-size: root.text-size; }
-        OsdField { label: "版本:"; tokens: root.version; text-size: root.text-size; }
+        OsdField { label: Translation.tr("文件名:", Translation.language-gen); tokens: root.file; text-size: root.text-size; }
+        OsdField { label: Translation.tr("当前时间:", Translation.language-gen); tokens: root.time; text-size: root.text-size; }
+        OsdField { label: Translation.tr("当前配置:", Translation.language-gen); tokens: root.config; text-size: root.text-size; }
+        OsdField { label: Translation.tr("版本:", Translation.language-gen); tokens: root.version; text-size: root.text-size; }
 
         Rectangle { height: root.section-gap; }
 
-        OsdField { label: "视频解码器:"; tokens: root.decoder; text-size: root.text-size; }
-        OsdField { label: "输入:"; tokens: root.input; text-size: root.text-size; }
-        OsdField { label: "格式:"; tokens: root.format; text-size: root.text-size; }
-        OsdField { label: "输出:"; tokens: root.output; text-size: root.text-size; }
-        OsdField { label: "视频渲染器:"; tokens: root.renderer; text-size: root.text-size; }
-        OsdField { label: "- 像素格式:"; tokens: root.pixel; text-size: root.text-size; }
-        OsdField { label: "- 帧:"; tokens: root.frames; text-size: root.text-size; }
-        OsdField { label: "视频帧大小:"; tokens: root.frame-size; text-size: root.text-size; }
+        OsdField { label: Translation.tr("视频解码器:", Translation.language-gen); tokens: root.decoder; text-size: root.text-size; }
+        OsdField { label: Translation.tr("输入:", Translation.language-gen); tokens: root.input; text-size: root.text-size; }
+        OsdField { label: Translation.tr("格式:", Translation.language-gen); tokens: root.format; text-size: root.text-size; }
+        OsdField { label: Translation.tr("输出:", Translation.language-gen); tokens: root.output; text-size: root.text-size; }
+        OsdField { label: Translation.tr("视频渲染器:", Translation.language-gen); tokens: root.renderer; text-size: root.text-size; }
+        OsdField { label: Translation.tr("- 像素格式:", Translation.language-gen); tokens: root.pixel; text-size: root.text-size; }
+        OsdField { label: Translation.tr("- 帧:", Translation.language-gen); tokens: root.frames; text-size: root.text-size; }
+        OsdField { label: Translation.tr("视频帧大小:", Translation.language-gen); tokens: root.frame-size; text-size: root.text-size; }
 
         Rectangle { height: root.section-gap; }
 
-        OsdField { label: "音频渲染器:"; tokens: root.audio; text-size: root.text-size; }
+        OsdField { label: Translation.tr("音频渲染器:", Translation.language-gen); tokens: root.audio; text-size: root.text-size; }
     }
 }

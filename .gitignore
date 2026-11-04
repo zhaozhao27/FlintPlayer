@@ -87,3 +87,8 @@ CLAUDE.md
 stream-*-frames/
 *.patch.out
 kern-snap-*.txt
+
+# 本地截图/分析图，不进版本库
+/analysis-a.png
+/r1.png
+/r1-small.png

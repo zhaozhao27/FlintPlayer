@@ -1,0 +1,1178 @@
+        不使用	Don't use
+        组合	Combination
+        组合编辑...	Edit combination...
+    10% 边距	10% margin
+    15% 边距	15% margin
+    20% 边距	20% margin
+    25% 边距	25% margin
+    30% 边距	30% margin
+    3D 降噪	3D noise reduction
+    5% 边距	5% margin
+    EVR(CP) 自荐渲染	EVR (CP) recommended rendering
+    HDR SMPTE ST 2084 自动校正	HDR SMPTE ST 2084 auto correction
+    HDR SMPTE ST 2086 自动校正	HDR SMPTE ST 2086 auto correction
+    Haali 视频渲染	Haali video renderer
+    Madshi 视频渲染	Madshi video renderer
+    VMR 7 无渲染	VMR 7 renderless
+    VMR 7 窗口化	VMR 7 windowed
+    VMR 9 无渲染	VMR 9 renderless
+    VMR 9 窗口化	VMR 9 windowed
+    YCgCo 色彩空间自动校正	YCgCo color space auto correction
+    上下翻转	Flip vertically
+    上移	Move up
+    下移	Move down
+    不使用	Don't use
+    不使用(推荐)	Don't use (recommended)
+    不使用缩放功能	No scaling
+    不保持声音同步	Don't keep audio in sync
+    不旋转	No rotation
+    不重置分辨率	Don't reset resolution
+    主音量 +	Main volume +
+    主音量 -	Main volume -
+    仅右眼（上下）	Right eye only (top/bottom)
+    仅右眼（左右并排）	Right eye only (side by side)
+    仅左眼（上下）	Left eye only (top/bottom)
+    仅左眼（左右并排）	Left eye only (side by side)
+    仅打开选定的文件	Open only the selected file
+    以当前时间命名文件	Name file by current time
+    以播放时间命名文件	Name file by playback time
+    位置复位	Reset position
+    使用休眠方式替代关机	Use hibernate instead of shutdown
+    使用待机方式替代关机	Use sleep instead of shutdown
+    使用默认关机	Use default shutdown
+    依次切换图像处理滤镜	Cycle image processing filters
+    依次切换收尾方式	Cycle post-playback action
+    保存流...	Save stream...
+    倍帧	Double frame rate
+    偏移	Offset
+    全屏时总在最前端	Always on top in fullscreen
+    关闭 3D 输出	Turn off 3D output
+    内置 Direct3D 9 视频渲染器	Built-in Direct3D 9 video renderer
+    内置 OpenGL 视频渲染器	Built-in OpenGL video renderer
+    内置(韩文)	Built-in (Korean)
+    减小音量	Decrease volume
+    分辨率设置...	Resolution settings...
+    切换反交错方式	Cycle deinterlace mode
+    切换最前端	Toggle topmost
+    创建缩略图...	Create thumbnail...
+    删除最近的采集文件	Delete recent capture file
+    去块(提高画质)	Deblock (better quality)
+    反交错设置...	Deinterlace settings...
+    右声道	Right channel
+    右移	Move right
+    同时截取字幕(如果有)	Capture subtitles too (if any)
+    同时打开全部文件	Open all files
+    同时打开相似文件	Open similar files
+    图像 1	Image 1
+    图像 2	Image 2
+    图像 3	Image 3
+    图像 4	Image 4
+    图像处理设置...	Image processing settings...
+    图像缩放设置...	Image scaling settings...
+    图像顺序选择	Select image order
+    声音 语言/接收器/其他 设置...	Audio language/receiver/other settings...
+    声音录制...	Audio recording...
+    复位	Reset
+    复位 360° 视角	Reset 360° view
+    复制当前实画面	Copy current displayed frame
+    复制当前源画面	Copy current source frame
+    多通道音量控制	Multi-channel volume control
+    始终保持声音同步	Always keep audio in sync
+    将文件名复制到剪贴板	Copy file name to clipboard
+    将文件完整路径复制到剪贴板	Copy full file path to clipboard
+    将文件路径复制到剪贴板	Copy file path to clipboard
+    左右声道互换	Swap left/right channels
+    左右翻转	Flip horizontally
+    左声道	Left channel
+    左移	Move left
+    开启 AC3/DTS 音量处理	Enable AC3/DTS volume processing
+    强制生成下边距	Force bottom margin
+    当低于判断值时使用	Use when below threshold
+    当高于判断值时使用	Use when above threshold
+    录制视频...	Record video...
+    总在最前端	Always on top
+    总是使用	Always use
+    总是使用(推荐)	Always use (recommended)
+    总重置分辨率	Always reset resolution
+    截取为 BMP	Capture as BMP
+    截取为 JPEG	Capture as JPEG
+    截取为 PNG	Capture as PNG
+    截取当前实画面为...	Capture current displayed frame as...
+    截取当前源画面为...	Capture current source frame as...
+    截存当前实画面	Save current displayed frame
+    截存当前源画面	Save current source frame
+    手动调整同步...	Adjust sync manually...
+    打开声音录制存档文件夹	Open audio recording folder
+    打开截图存档文件夹...	Open snapshot folder...
+    打开着色文件夹	Open shader folder
+    打开视频录制存档文件夹	Open video recording folder
+    按 1.85:1 拉伸	Stretch to 1.85:1
+    按 1.85:1 裁剪	Crop to 1.85:1
+    按 16:10 拉伸	Stretch to 16:10
+    按 16:10 裁剪	Crop to 16:10
+    按 16:9 拉伸	Stretch to 16:9
+    按 16:9 裁剪	Crop to 16:9
+    按 2.35:1 拉伸	Stretch to 2.35:1
+    按 2.35:1 裁剪	Crop to 2.35:1
+    按 4:3 拉伸	Stretch to 4:3
+    按 4:3 裁剪	Crop to 4:3
+    按像素单位缩放	Scale in pixels
+    按图像的宽高比而自动旋转 0/90°	Auto-rotate 0/90° by image aspect
+    按图像的宽高比而自动旋转 180/270°	Auto-rotate 180/270° by image aspect
+    按序切换声音	Cycle audio track
+    按序切换边距	Cycle margin
+    按序选择旋转方式	Cycle rotation
+    按调整后的比例保存	Save at adjusted ratio
+    播放完全部后关机	Shut down after all files
+    播放完全部后退出	Exit after all files
+    播放完当前后关机	Shut down after current file
+    播放完当前后退出	Exit after current file
+    播放时总在最前端	Always on top while playing
+    放大音量	Increase volume
+    旋转(水平|垂直 切换)	Rotate (swap horizontal/vertical)
+    旋转180°	Rotate 180°
+    旋转270°	Rotate 270°
+    旋转90°	Rotate 90°
+    无边距	No margin
+    显示器色域校正(ICC)	Monitor color gamut correction (ICC)
+    普通视频渲染	Normal video rendering
+    晶化	Crystallize
+    有字幕则显示下边距	Show bottom margin when subtitles exist
+    条件允许时储存到播放文件夹	Save to playback folder when possible
+    条件允许时储存在播放文件夹	Save in playback folder when possible
+    根据条件使用	Use conditionally
+    波形音量 +	Wave volume +
+    波形音量 -	Wave volume -
+    消色块	Color block removal
+    混响	Reverb
+    清空打开文件对话框中的下拉列表	Clear drop-down list in open dialog
+    渐进降噪	Progressive noise reduction
+    滞后 50ms	Delay 50ms
+    电平控制	Level control
+    瞬态降噪	Transient noise reduction
+    空视频渲染器(压缩)	Null video renderer (compressed)
+    空视频渲染器(未压缩)	Null video renderer (uncompressed)
+    立体声	Stereo
+    立即保存流...	Save stream now...
+    立即开始录制声音...	Start audio recording now...
+    立即录制视频...	Record video now...
+    立即连续截图...	Start continuous capture now...
+    系统主音量控制	System main volume control
+    系统波形音量控制	System wave volume control
+    红蓝立体（上下）	Anaglyph (top/bottom)
+    红蓝立体（左右并排）	Anaglyph (side by side)
+    自动色阶补偿	Auto level compensation
+    自动选择	Auto select
+    自动选择(推荐)	Auto select (recommended)
+    覆盖合成器	Overlay compositor
+    规格化	Normalize
+    记忆收尾操作	Remember post-playback action
+    设置声音录制存档文件夹...	Set audio recording folder...
+    语音增强	Voice enhancement
+    语音消除	Voice cancellation
+    调整尺寸前的着色切换	Shader toggle before resizing
+    调整尺寸后的着色切换	Shader toggle after resizing
+    超前 50ms	Advance 50ms
+    软模糊	Soft blur
+    边缘锐化	Edge sharpen
+    连续截图...	Continuous capture...
+    退出时初始化声音同步	Reset audio sync on exit
+    选择截图存档路径...	Choose snapshot folder...
+    选择视频录制存档路径...	Choose video recording folder...
+    重载着色文件	Reload shader files
+    锐化	Sharpen
+    降噪	Noise reduction
+    静音	Mute
+    音量控制设置...	Volume control settings...
+    默认声音输出设备(推荐)	Default audio output device (recommended)
+    默认音量控制(推荐)	Default volume control (recommended)
+# * 默认配置 and following entries are menu labels
+* 默认配置	* Default profile
+3D 字幕(立体)	3D subtitles (stereo)
+3D 视频输出	3D video output
+AB 区段循环	AB repeat
+DVD 文件(*.IFO)...	DVD file (*.IFO)...
+DVD 设备	DVD device
+OSD信息	OSD information
+Pass Through 声音输出设备	Pass-through audio output device
+　3D 字幕：上下排列	3D subtitles: top/bottom
+　3D 字幕：关闭	3D subtitles: off
+　3D 字幕：左右排列	3D subtitles: side by side
+　3D 字幕：红蓝立体	3D subtitles: anaglyph
+　上一个书签	Previous bookmark
+　上一章节	Previous chapter
+　下一个书签	Next bookmark
+　下一章节	Next chapter
+　中文	Chinese
+　位置：底部	Position: bottom
+　位置：顶部	Position: top
+　保存为 ASS（视频同目录）	Save as ASS (next to video)
+　保存为 SRT（视频同目录）	Save as SRT (next to video)
+　停止朗读	Stop reading
+　关闭 AB 循环	Turn off AB repeat
+　关闭字幕	Turn off subtitles
+　前进 10 秒	Forward 10 seconds
+　后退 10 秒	Back 10 seconds
+　字体：{name}	Font: {name}
+　字号：中	Font size: medium
+　字号：大	Font size: large
+　字号：小	Font size: small
+　字号：特大	Font size: extra large
+　字幕延迟 +0.1 秒	Subtitle delay +0.1s
+　字幕延迟 +0.5 秒	Subtitle delay +0.5s
+　字幕延迟 -0.1 秒	Subtitle delay -0.1s
+　字幕延迟 -0.5 秒	Subtitle delay -0.5s
+　打开字幕...	Open subtitles...
+　无章节信息	No chapter information
+　日文	Japanese
+　显示常用徽标	Show idle logo
+　显示播放时徽标	Show playing logo
+　更快	Faster
+　更慢	Slower
+　朗读当前字幕	Read current subtitle
+　添加书签	Add bookmark
+　添加文件...	Add file...
+　添加文件夹...	Add folder...
+　清空播放列表	Clear playlist
+　清除书签	Remove bookmark
+　清除徽标	Clear logo
+　皮肤中定义的菜单	Menu defined in skin
+　粗体	Bold
+　系统菜单	System menu
+　自动(跟随皮肤)	Auto (follow skin)
+　自动选择(推荐)	Auto select (recommended)
+　英文	English
+　记忆点 {}	Memory point {}
+　设置 A 点	Set point A
+　设置 B 点	Set point B
+　跳到开头	Jump to start
+　跳到结尾	Jump to end
+　还有 {} 个章节未显示	{} more chapters not shown
+　韩文	Korean
+　颜色：白色	Color: white
+　颜色：绿色	Color: green
+　颜色：青色	Color: cyan
+　颜色：黄色	Color: yellow
+　黑暗系统菜单	Dark system menu
+　（无外部皮肤，用“浏览皮肤...”载入）	(No external skins. Use "Browse skins..." to load)
+　（没有内嵌字幕轨）	(No embedded subtitle track)
+上一文件	Previous file
+下一文件	Next file
+下边距	Bottom margin
+不保持宽高比	Don't keep aspect ratio
+不透明度	Opacity
+主页...	Home page...
+亮度 +1%	Brightness +1%
+亮度 -1%	Brightness -1%
+仅在标题栏上移动窗口	Move window only by title bar
+以视频皮肤启动	Start with video skin
+使用触屏功能	Use touch features
+依次切换比例	Cycle aspect ratio
+依次切换比例模式	Cycle aspect ratio mode
+保存字幕	Save subtitles
+保持全屏宽高比	Keep fullscreen aspect ratio
+保持宽高比(推荐)	Keep aspect ratio (recommended)
+偏移 ←	Offset ←
+偏移 ↑	Offset ↑
+偏移 →	Offset →
+偏移 ↓	Offset ↓
+像素着色	Pixel shader
+全屏	Fullscreen
+全屏(其他显示器)	Fullscreen (other display)
+全屏+	Fullscreen+
+全屏+(保持比例)	Fullscreen+ (keep ratio)
+全屏+(拉伸)	Fullscreen+ (stretch)
+全帧 +	Full frame +
+全帧 -	Full frame -
+关于...	About...
+关闭	Close
+减少屏幕上边距	Decrease top screen margin
+减少屏幕左边距	Decrease left screen margin
+分辨率	Resolution
+列表...	List...
+原始比例	Original ratio
+反交错	Deinterlace
+固定为0.5倍帧	Fix at 0.5x frame rate
+固定为1.0倍帧	Fix at 1.0x frame rate
+固定为1.5倍帧	Fix at 1.5x frame rate
+固定为2.0倍帧	Fix at 2.0x frame rate
+图像处理	Image processing
+图像处理滤镜	Image processing filters
+图像属性复位	Reset image properties
+图像截取	Image capture
+图像旋转	Image rotation
+图层面板皮肤输出	Panel skin output in layer
+在收藏菜单中显示播放记忆点	Show playback memory points in favorites
+在线字幕搜索	Online subtitle search
+在进度条上显示书签/章节标记	Show bookmark/chapter markers on progress bar
+均衡器	Equalizer
+增加屏幕上边距	Increase top screen margin
+增加屏幕左边距	Increase left screen margin
+声音	Audio
+声音匹配(同步)	Audio matching (sync)
+声音处理	Audio processing
+声音输出 位率/采样率	Audio output bitrate/sample rate
+声音输出方式	Audio output mode
+声音输出设置...	Audio output settings...
+声音输出轨道	Audio output track
+复制当前字幕到剪贴板	Copy current subtitle to clipboard
+字幕	Subtitles
+字幕同步(帧率)	Subtitle sync (frame rate)
+字幕字体处理	Subtitle font handling
+字幕样式	Subtitle style
+字幕浏览器...	Subtitle browser...
+字幕设置...	Subtitle settings...
+字幕语言	Subtitle language
+字幕边框不透明	Opaque subtitle outline
+字幕阴影	Subtitle shadow
+定位	Position
+实时字幕翻译	Real-time subtitle translation
+对比度 +1%	Contrast +1%
+对比度 -1%	Contrast -1%
+将标准图形字幕输出到画面外	Output standard bitmap subtitles outside picture
+将标准文本字幕输出到画面内	Output standard text subtitles inside picture
+尽可能将字幕显示在画面底部	Keep subtitles as low as possible
+屏幕	Screen
+屏幕尺寸设置...	Screen size settings...
+属性...	Properties...
+单帧分析	Frame analysis
+帧号	Frame number
+上一帧	Previous frame
+下一帧	Next frame
+上一帧/下一帧	Previous / next frame
+播放|暂停	Play|Pause
+帧位	Frame position
+帧位 之前/复位	Frame position previous/reset
+帧位居中	Center frame position
+帧宽 +	Frame width +
+帧宽 -	Frame width -
+帧高 +	Frame height +
+帧高 -	Frame height -
+常用徽标	Idle logo
+平滑输出 VMR/EVR 字幕	Smooth VMR/EVR subtitle output
+开启 ASS/SSA 动态字幕	Enable ASS/SSA animated subtitles
+开启声音处理滤镜	Enable audio processing filters
+弹出菜单类型	Popup menu type
+循环播放	Repeat
+忽略默认快捷键	Ignore default shortcuts
+截图存档路径	Snapshot folder
+截屏1 尺寸设置...	Capture 1 size settings...
+截屏2 尺寸设置...	Capture 2 size settings...
+手动输入字幕...	Enter subtitle manually...
+打开	Open
+打开剪贴板	Open clipboard
+打开字幕...	Open subtitles...
+打开文件...	Open file...
+打开文件夹...	Open folder...
+打开远程连接...	Open remote connection...
+打开链接...	Open link...
+控制...	Controls...
+摄像头/其他设备	Camera/other device
+播放	Playback
+播放 360° 视频	Play 360° video
+播放/暂停	Play/Pause
+播放信息	Playback information
+播放列表	Playlist
+播放完关闭媒体	Close media after playback
+播放完移除相关文件	Remove related files after playback
+播放时的徽标	Playing logo
+播放时禁止屏保	Disable screensaver while playing
+播放时隐藏指针	Hide cursor while playing
+播放设置...	Playback settings...
+播放速度	Playback speed
+播放音量控制	Playback volume control
+收尾处理	Post-playback action
+收藏	Favorites
+数字 TV(BDA 设备)	Digital TV (BDA device)
+无序(随机)播放	Shuffle
+无正在使用的滤镜	No filters in use
+无缝播放	Seamless playback
+无边框尺寸	Borderless size
+显示器 45% 尺寸	45% of screen size
+显示器 60% 尺寸	60% of screen size
+显示器 75% 尺寸	75% of screen size
+显示字幕	Show subtitles
+暂无收藏	No favorites
+最大化	Maximize
+最大化+(任务栏)还原	Maximize+ (taskbar) restore
+最大化/还原	Maximize/Restore
+模拟TV	Analog TV
+次声音输出设备	Secondary audio output device
+比例	Aspect ratio
+浏览器...	Browser...
+浏览皮肤...	Browse skins...
+添加字幕...	Add subtitles...
+添加当前文件	Add current file
+添加当前文件夹	Add current folder
+添加次字幕...	Add secondary subtitles...
+清除收藏	Clear favorites
+滤镜	Filters
+生成有声字幕 (TTS)	Generate spoken subtitles (TTS)
+用户自定义(4:3)	Custom (4:3)
+皮肤	Skins
+皮肤设置...	Skin settings...
+直接输出在视频中(TV输出)	Output directly in video (TV out)
+直播相关工具	Live streaming tools
+相似文件操作	Similar file operation
+窗口 +	Window +
+窗口 -	Window -
+窗口定位	Window position
+屏幕左上角	Top-left of screen
+屏幕右上角	Top-right of screen
+屏幕左下角	Bottom-left of screen
+屏幕右下角	Bottom-right of screen
+屏幕居中	Center of screen
+恢复窗口位置	Restore window position
+章节/书签	Chapters/Bookmarks
+简索	Navigate
+简要信息	Brief information
+系统音量	System volume
+置顶方式	Topmost mode
+自定义尺寸	Custom size
+自定义尺寸设置...	Custom size settings...
+色彩度 +1%	Color +1%
+色彩度 -1%	Color -1%
+菜单输出方式	Menu output mode
+蓝光文件(*.MPLS)...	Blu-ray file (*.MPLS)...
+蓝光设备	Blu-ray device
+裁剪/拉伸	Crop/Stretch
+覆盖 VMR/EVR 输出(高品质)	Overlay VMR/EVR output (high quality)
+视频	Video
+视频录制	Video recording
+视频渲染器	Video renderer
+视频输出设置...	Video output settings...
+触控皮肤	Touch skin
+记忆下次运行的图像尺寸/位置	Remember image size/position for next run
+记忆播放位置	Remember playback position
+设备设置...	Device settings...
+语言	Language
+跳略播放	Skip playback
+载入音频...	Load audio...
+辅助处理	Auxiliary processing
+输出比例(推荐)	Output aspect ratio (recommended)
+退出	Exit
+选择图像	Select image
+选择声音	Select audio
+选择字幕	Select subtitle
+选项...	Options...
+配置/语言/其他	Profiles/Language/Other
+配置管理...	Profile manager...
+配色	Color scheme
+采集器	Capture device
+采集器I	Capture device I
+采集器II	Capture device II
+采集器II开始	Start capture device II
+采集器I开始	Start capture device I
+采集设置...	Capture settings...
+重开当前/最后文件	Reopen current/last file
+重载字幕	Reload subtitles
+静音	Mute
+音轨	Audio track
+音量 +	Volume +
+音量 -	Volume -
+预置	Presets
+饱和度 +1%	Saturation +1%
+饱和度 -1%	Saturation -1%
+首选打开方式	Default Open Action
+默认声音输出设备	Default audio output device
+鼠标在进度条上时显示时间	Show time when hovering progress bar
+鼠标指向进度条时显示缩略图	Show thumbnail when hovering progress bar
+［内置皮肤］	[Built-in skins]
+［外部皮肤］	[External skins]
+简体中文	Simplified Chinese
+    简体中文	    Simplified Chinese
+　重置字幕延迟（当前 {delay} 秒）	Reset subtitle delay (currently {delay}s)
+ 秒	 s
++ 新建专辑	+ New album
+- 像素格式:	- Pixel format:
+- 帧:	- Frames:
+1# 截屏器尺寸设置	Screenshot 1 size settings
+2# 截屏器尺寸设置	Screenshot 2 size settings
+BDA(ATV) 设备	BDA (ATV) device
+BDA(HDTV) 设备	BDA (HDTV) device
+Copyright © 2026 FlintPlayer Project. 保留所有权利。	Copyright © 2026 FlintPlayer Project. All rights reserved.
+DVD/蓝光碟	DVD/Blu-ray
+FFmpeg 遵循 LGPL/GPL 许可协议；Slint 遵循 GPL/商业许可。	FFmpeg is licensed under LGPL/GPL; Slint is licensed under GPL or commercial terms.
+Linux 上的 PotPlayer 风格媒体播放器	A PotPlayer-style media player for Linux
+上级	Up
+不透明度作用于弹出菜单与子菜单；皮肤文件放在皮肤目录，或用“浏览...”载入。	Opacity applies to popup menus and submenus; place skin files in the skin directory, or load one with "Browse...".
+中	Medium
+位置	Position
+使用 Microsoft 默认调谐器	Use Microsoft default tuner
+使用新的连接方式(推荐)	Use new connection method (recommended)
+使用时间定位功能	Use time seek feature
+使用时间跳移功能	Use time shift feature
+使用系统解码器	Use system decoder
+停止	Stop
+光盘设备	Optical disc device
+全屏时不遮盖画面	Do not cover the video in fullscreen
+关于 FlintPlayer	About FlintPlayer
+其他	Other
+分	min
+分解器：	Splitter:
+分辨率,FPS：	Resolution, FPS:
+创建	Create
+创建缩略图	Create thumbnail
+删除	Delete
+刷新	Refresh
+区域：	Region:
+取消	Cancel
+取消(C)	Cancel(C)
+启动	Start
+基于 Rust、Slint 与 FFmpeg 构建。	Built with Rust, Slint and FFmpeg.
+复位	Reset
+大	Large
+字体	Font
+字号	Size
+字幕延迟	Subtitle delay
+字幕设置	Subtitle settings
+宽度（像素）：	Width (pixels):
+小	Small
+屏幕采集设置...	Screen capture settings...
+已冻结	Frozen
+底部	Bottom
+开始	Start
+张数：	Count:
+当前时间:	Current time:
+当前配置:	Current profile:
+待机	Sleep
+截屏器设置	Screenshot settings
+打开(O)	Open(O)
+打开后自动播放	Auto play on open
+打开文件	Open file
+打开文件夹	Open folder
+打开设备(O)	Open device(O)
+排序	Sort
+摄像头	Camera
+播放列表为空	Playlist is empty
+播放设置	Playback settings
+支持本地媒体文件、网络串流与采集设备。	Supports local media files, network streams and capture devices.
+数字 TV	Digital TV
+文件名:	File name:
+新建（复制当前配置）	New (copy current profile)
+无信号	No signal
+无可用采集设备	No capture device available
+时间定位	Time seek
+时间：	Time:
+显示 1# 截屏器	Show screenshot 1
+显示 2# 截屏器	Show screenshot 2
+暂不支持该 EPG。	This EPG is not supported yet.
+更改会立即生效并保存到配置文件；字幕样式作用于已加载的字幕。	Changes take effect immediately and are saved to the config file; subtitle style applies to loaded subtitles.
+格式	Format
+格式:	Format:
+格式：	Format:
+检索更新	Check for updates
+模拟 TV	Analog TV
+此电脑	This PC
+浏览...	Browse...
+浏览器	Browser
+添加	Add
+版本 	Version 
+版本:	Version:
+特大	Extra large
+用户自定义 CLSID：	Custom CLSID:
+白色	White
+皮肤文件	Skin file
+皮肤设置	Skin settings
+确定	OK
+确定(O)	OK(O)
+粗体	Bold
+绿色	Green
+网\n络	Net\nwork
+网络流	Network stream
+视频下自动隐藏	Auto-hide below video
+视频帧大小:	Video frame size:
+视频录制设备	Video recording device
+视频渲染器:	Video renderer:
+视频解码器:	Video decoder:
+设\n备	Dev\nice
+设备	Devices
+设备设置	Device settings
+设备：	Device:
+载入	Load
+输入:	Input:
+输入：	Input:
+输出:	Output:
+输出目录：	Output directory:
+输出：	Output:
+连接	Connect
+连接在我的电脑上能够听到的声音	Connect to sound audible on this computer
+连续截图	Continuous capture
+选择文件夹	Select folder
+配置管理	Profile manager
+采集在我的电脑上可听到的声音	Capture sound audible on this computer
+采集设备	Capture device
+重命名	Rename
+间隔（毫秒）：	Interval (ms):
+阴影	Shadow
+青色	Cyan
+音频录制设备	Audio recording device
+音频渲染器:	Audio renderer:
+音频采集设备	Audio capture device
+音频：	Audio:
+顶部	Top
+颜色	Color
+高级设置	Advanced settings
+黄色	Yellow
+默认专辑	Default album
+没有可用的采集设备	No capture device available
+有字幕则显示下边距：{}	Show bottom margin when subtitles are present: {}
+强制生成下边距：{}	Force bottom margin: {}
+循环播放：{}	Loop playback: {}
+随机播放：{}	Shuffle playback: {}
+记忆播放位置：{}	Remember playback position: {}
+进度条书签/章节标记：{}	Bookmark/chapter markers on the progress bar: {}
+已停止朗读	Speech stopped
+字幕位置：{}	Subtitle position: {}
+字幕颜色：{name}	Subtitle color: {name}
+字幕字号：{scale:.2}	Subtitle size: {scale:.2}
+已取消{label}	Cancelled {label}
+视频下自动隐藏：{}	Auto-hide below video: {}
+忽略默认快捷键：{}	Ignore default shortcuts: {}
+在收藏菜单中显示播放记忆点：{}	Show playback memory points in favorites: {}
+相似文件操作：{label}	Similar file action: {label}
+使用触屏功能：{}	Touch screen support: {}
+仅在标题栏上移动窗口：{}	Move window only by the title bar: {}
+收尾处理：{label}	Post-playback action: {label}
+记忆收尾操作：{}	Remember post-playback action: {}
+{label}失败：{detail}	{label} failed: {detail}
+{label}失败：{error}	{label} failed: {error}
+已载入配置：{name}	Profile loaded: {name}
+当前没有可截取的画面	No frame available to capture
+连续截图开始：{count} 张，间隔 {interval_ms} ms	Continuous capture started: {count} frames, interval {interval_ms} ms
+连续截图完成：{total} 张	Continuous capture finished: {total} frames
+截图存档路径不能为空	Screenshot archive path cannot be empty
+创建截图目录失败：{error}	Failed to create screenshot directory: {error}
+截图存档路径：{}	Screenshot archive path: {}
+正在创建缩略图…	Creating thumbnail...
+全屏时不遮盖画面：{}	Do not cover the video in fullscreen: {}
+配色：{}	Color scheme: {}
+菜单不透明度：{percent}%	Menu opacity: {percent}%
+图层面板皮肤输出：{}	Panel skin output in layer: {}
+弹出菜单类型：{}	Popup menu type: {}
+菜单输出方式：{}	Menu output mode: {}
+触控皮肤：{}	Touch skin: {}
+以视频皮肤启动：{}	Start with video skin: {}
+界面语言：{label}	UI language: {label}
+皮肤：{}	Skin: {}
+无法读取图片: {}	Unable to read image: {}
+已清除徽标	Logos cleared
+无法读取皮肤文件: {}	Unable to read skin file: {}
+没有可显示字幕的画面	No video available to display subtitles
+已加载字幕 {name}（{count} 条）	Subtitle loaded: {name} ({count} cues)
+当前没有加载字幕	No subtitle loaded
+字幕地址必须以 http:// 或 https:// 开头	Subtitle address must start with http:// or https://
+无法创建字幕目录：{error}	Failed to create subtitle directory: {error}
+正在下载字幕...	Downloading subtitle...
+字幕下载失败	Subtitle download failed
+实时字幕翻译：{}	Live subtitle translation: {}
+字幕语言：{}	Subtitle language: {}
+已加载{label}（{count} 条）	Loaded {label} ({count} entries)
+已关闭字幕	Subtitles closed
+尚未加载字幕，按 Alt+O 打开字幕文件	No subtitle loaded; press Alt+O to open a subtitle file
+尚未加载字幕	No subtitle loaded
+字幕延迟：{:+.1} 秒	Subtitle delay: {:+.1} s
+字幕字体：{name}	Subtitle font: {name}
+字幕粗体：{}	Subtitle bold: {}
+ASS/SSA 字幕样式：{}	ASS/SSA subtitle style: {}
+3D 字幕：{label}	3D subtitles: {label}
+字幕阴影：{}	Subtitle shadow: {}
+3D 视频输出：{}	3D video output: {}
+360° 视频播放：{}	360° video playback: {}
+360° 视角已复位	360° view reset
+图像属性已复位	Image properties reset
+缩放：{label}	Scaling: {label}
+下边距：{label}	Bottom margin: {label}
+画面位置已复位	Picture position reset
+画面位置：{label}	Picture position: {label}
+图像旋转：{degrees}°	Image rotation: {degrees}°
+生成有声字幕：{}	Generate voiced subtitles: {}
+当前没有显示中的字幕	No subtitle is currently displayed
+朗读字幕：{text}	Read subtitle aloud: {text}
+已复制当前字幕：{text}	Current subtitle copied: {text}
+复制字幕失败：{error}	Failed to copy subtitle: {error}
+字幕已保存：{}	Subtitle saved: {}
+保存字幕失败：{error}	Failed to save subtitle: {error}
+路径不存在: {}	Path does not exist: {}
+文件夹中没有支持的媒体文件: {}	No supported media files in folder: {}
+已添加 {} 个文件到播放列表	Added {} files to the playlist
+已同时打开 {added} 个文件	Opened {added} files at once
+书签仅支持正在播放的本地文件	Bookmarks are only available for a playing local file
+已添加书签 {position:.1} 秒（共 {count} 个）	Bookmark added at {position:.1} s ({count} total)
+书签跳转仅支持正在播放的本地文件	Bookmark seeking is only available for a playing local file
+没有可跳转的书签	No bookmark to seek to
+跳转到书签 {target:.1} 秒	Jumped to bookmark {target:.1} s
+当前文件没有章节信息	The current file has no chapter information
+章节跳转仅支持正在播放的本地文件	Chapter seeking is only available for a playing local file
+已经是最后一个章节	Already at the last chapter
+章节：{title}（{}）	Chapter: {title} ({})
+仅支持收藏正在播放的本地文件	Favorites are only available for a playing local file
+没有可收藏的文件夹	No folder available to favorite
+收藏路径不存在：{}	Favorite path does not exist: {}
+跳转到记忆点 {}	Jumped to memory point {}
+打开收藏文件夹 {}	Opening favorite folder {}
+AB 循环仅支持正在播放的本地文件	AB repeat is only available for a playing local file
+A 点：{}	Point A: {}
+请先设置 A 点	Set point A first
+B 点必须晚于 A 点	Point B must be later than point A
+AB 循环：{} - {}	AB repeat: {} - {}
+播放列表中没有可清空的项目	No playlist items to clear
+已清空 {} 个播放列表项目（保留当前播放）	Cleared {} playlist items (current playback kept)
+播放速度 {speed:.1}x	Playback speed {speed:.1}x
+选择声音：{label}	Audio selection: {label}
+左右声道互换：{}	Swap left/right channels: {}
+音频轨道：{label}	Audio track: {label}
+声音同步：{}	Audio sync: {}
+滞后 {}ms	Delay {} ms
+超前 {}ms	Advance {} ms
+声音同步：已复位	Audio sync: reset
+音频同步保持：{label}	Keep audio sync: {label}
+退出时初始化声音同步：{label}	Reset audio sync on exit: {label}
+录制已保存：{}	Recording saved: {}
+创建录制目录失败：{error}	Failed to create recording directory: {error}
+开始录制：{}	Recording started: {}
+开始录制失败：{error}	Failed to start recording: {error}
+置顶方式：{label}	Topmost mode: {label}
+当前 Wayland 会话不支持窗口置顶（X11 / XWayland 下可用）	Window pinning is not supported in this Wayland session (available under X11 / XWayland)
+当前没有打开的文件	No file is currently open
+当前没有可复制的文件路径	No file path available to copy
+已复制到剪贴板：{text}	Copied to clipboard: {text}
+复制失败：{error}	Copy failed: {error}
+截图格式：{label}	Screenshot format: {label}
+截图命名：{label}	Screenshot naming: {label}
+储存到播放文件夹：{}	Save to playback folder: {}
+打开截图文件夹失败：{error}	Failed to open screenshot folder: {error}
+没有可删除的采集文件	No captured files to delete
+已删除：{}	Deleted: {}
+删除失败：{error}	Delete failed: {error}
+截图已保存：{}	Screenshot saved: {}
+保存截图失败：{error}	Failed to save screenshot: {error}
+缩略图已保存：{}	Thumbnail saved: {}
+保存缩略图失败：{error}	Failed to save thumbnail: {error}
+创建缩略图目录失败：{error}	Failed to create thumbnail directory: {error}
+缩略图缓冲尺寸无效	Invalid thumbnail buffer size
+截图缓冲尺寸无效	Invalid screenshot buffer size
+播放已结束，是否立即{label}？	Playback finished. {label} now?
+已请求{label}	{label} requested
+录制已保存：{}（{} 帧，丢 {} 帧）	Recording saved: {} ({} frames, {} dropped)
+已添加 {} 到播放列表	Added {} to the playlist
+{} 已在播放列表中	{} is already in the playlist
+已清除 {count} 个书签	Cleared {count} bookmarks
+已收藏 {name}	Added {name} to favorites
+{name} 已在收藏中	{name} is already in favorites
+已清除 {count} 个收藏	Cleared {count} favorites
+保存配置失败：{error}	Failed to save config: {error}
+保存播放位置失败：{error}	Failed to save playback position: {error}
+创建配置目录失败：{error}	Failed to create config directory: {error}
+配置 {number}	Profile {number}
+已新建配置：{name}	Profile created: {name}
+新建配置失败：{error}	Failed to create profile: {error}
+默认配置无法重命名	The default profile cannot be renamed
+配置名称无效	Invalid profile name
+已存在同名配置：{clean}	A profile with the same name exists: {clean}
+已重命名：{old_name} → {clean}	Renamed: {old_name} → {clean}
+重命名失败：{error}	Rename failed: {error}
+默认配置无法删除	The default profile cannot be deleted
+已删除配置：{name}	Profile deleted: {name}
+载入配置失败：{error}	Failed to load profile: {error}
+输出目录：{directory}	Output directory: {directory}
+启动采集失败：{error}	Failed to start capture: {error}
+启动采集：{} {}x{} {} fps fourcc={:?}	Starting capture: {} {}x{} {} fps fourcc={:?}
+发现 {} 个 V4L2 采集节点	Found {} V4L2 capture nodes
+, 时间轴: 	, Timeline: 
+, #帧数: 	, Frames: 
+*默认配置	*Default profile
+无音频输入	No audio input
+已停止	Stopped
+暂停	Paused
+播放中	Playing
+文件名	File name
+状态	Status
+速度	Speed
+音量	Volume
+时间	Time
+ (静音)	 (muted)
+{format} ({bits} 位), {w}×{h}	{format} ({bits}-bit), {w}×{h}
+, 帧率: 	, FPS: 
+, 位率: 	, Bitrate: 
+, 像素: 	, Pixel format: 
+ (32 位), {w}×{h}	 (32-bit), {w}×{h}
+, 丢帧: 	, Dropped: 
+ ({percent}%), 解码: 	 ({percent}%), Decode: 
+, 码率: 	, Bitrate: 
+内置 FFmpeg 解码器	Built-in FFmpeg decoder
+ ({name}, 1 线程)	 ({name}, 1 thread)
+内置 FFmpeg 像素转换	Built-in FFmpeg pixel conversion
+0.25倍	0.25x
+0.5倍	0.5x
+0.75倍	0.75x
+正常速度	Normal speed
+1.25倍	1.25x
+1.5倍	1.5x
+2倍	2x
+3倍	3x
+4倍	4x
+倍帧	Double frame rate
+空格键	Space
+默认皮肤	Default skin
+暗黑皮肤	Dark skin
+琥珀皮肤	Amber skin
+青绿皮肤	Teal skin
+外部皮肤	External skin
+默认配置	Default profile
+海洋	Ocean
+自定义	Custom
+不存在	Not found
+关机	Shut down
+休眠	Hibernate
+数字键1	Num 1
+数字键2	Num 2
+数字键4	Num 4
+数字键5	Num 5
+数字键6	Num 6
+数字键8	Num 8
+数字键9	Num 9
+Ctrl+数字键2	Ctrl+Num 2
+Ctrl+数字键4	Ctrl+Num 4
+Ctrl+数字键5	Ctrl+Num 5
+Ctrl+数字键6	Ctrl+Num 6
+Ctrl+数字键8	Ctrl+Num 8
+Ctrl+Alt+数字键+	Ctrl+Alt+Num +
+Ctrl+Alt+数字键-	Ctrl+Alt+Num -
+查看菜单名称	Show menu names
+放大皮肤中定义的菜单	Enlarge skin-defined menus
+不切换界面模式	Keep interface mode
+单独保存音频/视频界面位置/尺寸	Save audio/video interface position and size separately
+图层面板皮肤输出：开启	Layer panel skin output: On
+图层面板皮肤输出：关闭	Layer panel skin output: Off
+触控皮肤：开启	Touch skin: On
+触控皮肤：关闭	Touch skin: Off
+以视频皮肤启动：开启	Start with video skin: On
+以视频皮肤启动：关闭	Start with video skin: Off
+查看菜单名称：开启	Menu names: On
+查看菜单名称：关闭	Menu names: Off
+放大皮肤中定义的菜单：开启	Enlarged skin menus: On
+放大皮肤中定义的菜单：关闭	Enlarged skin menus: Off
+不切换界面模式：开启	Keep interface mode: On
+不切换界面模式：关闭	Keep interface mode: Off
+单独保存音频/视频界面位置/尺寸：开启	Separate audio/video geometry: On
+单独保存音频/视频界面位置/尺寸：关闭	Separate audio/video geometry: Off
+蓝色	Blue
+红色	Red
+紫色	Purple
+橙色	Orange
+银色	Silver
+自动(跟随皮肤)	Auto (follow skin)
+输入流已结束	End of stream
+画面调整（亮度 {}，对比度 {}，饱和度 {}）	Picture adjust (brightness {}, contrast {}, saturation {})
+画面旋转 {}°	Picture rotation {}°
+使用 AviSynth 滤镜	Use AviSynth filter
+选择 AviSynth 脚本...	Select AviSynth script...
+打开 AviSynth 脚本文件夹	Open AviSynth script folder
+使用 VapourSynth 滤镜	Use VapourSynth filter
+选择 VapourSynth 脚本...	Select VapourSynth script...
+打开 VapourSynth 脚本文件夹	Open VapourSynth script folder
+当前构建未启用 AviSynth 处理管线	AviSynth processing is not enabled in this build
+未找到 AviSynth 引擎	AviSynth engine not found
+当前构建未启用 VapourSynth 处理管线	VapourSynth processing is not enabled in this build
+未找到 VapourSynth 引擎	VapourSynth engine not found
+将标准图形字幕输出到画面外	Output standard graphic subtitles outside the picture
+将标准文本字幕输出到画面内	Output standard text subtitles inside the picture
+尽可能将字幕显示在画面底部	Show subtitles at the bottom of the picture when possible
+字幕边框不透明	Opaque subtitle outline
+平滑输出 VMR/EVR 字幕	Smooth VMR/EVR subtitle output
+将标准图形字幕输出到画面外：开	Output standard graphic subtitles outside the picture: On
+将标准图形字幕输出到画面外：关	Output standard graphic subtitles outside the picture: Off
+将标准文本字幕输出到画面内：开	Output standard text subtitles inside the picture: On
+将标准文本字幕输出到画面内：关	Output standard text subtitles inside the picture: Off
+尽可能将字幕显示在画面底部：开	Bottom-aligned subtitles: On
+尽可能将字幕显示在画面底部：关	Bottom-aligned subtitles: Off
+字幕边框不透明：开	Opaque subtitle outline: On
+字幕边框不透明：关	Opaque subtitle outline: Off
+平滑输出 VMR/EVR 字幕：开	Smooth VMR/EVR subtitles: On
+平滑输出 VMR/EVR 字幕：关	Smooth VMR/EVR subtitles: Off
+AviSynth 脚本：{}	AviSynth script: {}
+VapourSynth 脚本：{}	VapourSynth script: {}
+创建 {} 脚本目录失败：{}	Failed to create {} script folder: {}
+打开 {} 脚本目录失败：{}	Failed to open {} script folder: {}
+自动选择(推荐)	Auto select (recommended)
+简体中文	Simplified Chinese
+不使用缩放功能	No scaling
+按 4:3 拉伸	Stretch to 4:3
+按 16:9 拉伸	Stretch to 16:9
+按 16:10 拉伸	Stretch to 16:10
+按 1.85:1 拉伸	Stretch to 1.85:1
+按 2.35:1 拉伸	Stretch to 2.35:1
+左移	Move left
+右移	Move right
+上移	Move up
+下移	Move down
+帧大小：宽 {x}% 高 {y}%	Frame size: width {x}% height {y}%
+声音输出位率/采样率：{label}	Audio output bitrate/sample rate: {label}
+声音输出设备：{label}	Audio output device: {label}
+次声音输出设备：{label}	Secondary audio output device: {label}
+16 位	16-bit
+24 位	24-bit
+32 位浮点	32-bit float
+按序切换声音	Cycle audio
+立体声	Stereo
+左声道	Left channel
+右声道	Right channel
+默认声音输出设备(推荐)	Default audio output device (recommended)
+不使用(推荐)	None (recommended)
+位率/采样率 复位	Reset bitrate/sample rate
+44.1 kHz	44.1 kHz
+48 kHz	48 kHz
+96 kHz	96 kHz
+192 kHz	192 kHz
+默认音量控制(推荐)	Default volume control (recommended)
+系统波形音量控制	System waveform volume control
+系统主音量控制	System master volume control
+多通道音量控制	Multichannel volume control
+主音量 +	Master volume +
+主音量 -	Master volume -
+开启 AC3/DTS 音量处理	Enable AC3/DTS volume processing
+放大音量	Increase volume
+减小音量	Decrease volume
+音量控制设置...	Volume control settings...
+波形音量 +	Waveform volume +
+波形音量 -	Waveform volume -
+手动调整同步...	Adjust sync manually...
+滞后 50ms	Delay 50 ms
+超前 50ms	Advance 50 ms
+不保持声音同步	Do not keep audio sync
+退出时初始化声音同步	Reset audio sync on exit
+始终保持声音同步	Always keep audio sync
+规格化	Normalize
+晶化	Crystalize
+降噪	Noise reduction
+混响	Reverb
+语音消除	Vocal removal
+语音增强	Voice enhancement
+左右声道互换	Swap left/right channels
+声音 语言/接收器/其他 设置...	Audio language/receiver/other settings...
+声音录制...	Audio recording...
+立即开始录制声音...	Start audio recording now...
+设置声音录制存档文件夹...	Set audio recording archive folder...
+打开声音录制存档文件夹	Open audio recording archive folder
+条件允许时储存在播放文件夹	Save in play folder when possible
+记忆下次运行的图像尺寸/位置：开	Remember image size/position for next run: On
+记忆下次运行的图像尺寸/位置：关	Remember image size/position for next run: Off
+主音量 +	Master volume +
+主音量 -	Master volume -
+波形音量 +	Waveform volume +
+波形音量 -	Waveform volume -
+多通道音量控制	Multi-channel volume control
+默认音量控制(推荐)	Default volume control (recommended)
+系统波形音量控制	System waveform volume control
+系统主音量控制	System master volume control
+开启 AC3/DTS 音量处理	Enable AC3/DTS volume processing
+音量控制设置...	Volume control settings...
+减小音量	Decrease volume
+静音：{label}	Mute: {label}
+音量控制方式：{label}	Volume control: {label}
+系统音量：{label}%	System volume: {label}%
+系统音量已调整	System volume adjusted
+开	On
+关	Off
+系统静音：{label}	System mute: {label}
+调整系统音量失败：{label}	Failed to adjust system volume: {label}
+切换系统静音失败：{label}	Failed to toggle system mute: {label}
+截图	Screenshot
+声音录制	Audio recording
+视频录制存档路径	Video recording folder
+声音录制存档文件夹	Audio recording folder
+输入截图保存目录，按回车确认	Enter the screenshot folder and press Enter
+输入视频录制保存目录，按回车确认	Enter the video recording folder and press Enter
+输入声音录制保存目录，按回车确认	Enter the audio recording folder and press Enter
+存档路径不能为空	Archive path cannot be empty
+创建存档目录失败：{}	Failed to create archive directory: {}
+{label}存档路径：{}	{label} archive path: {}
+视频录制储存在播放文件夹：{}	Save video recordings in the play folder: {}
+声音录制储存在播放文件夹：{}	Save audio recordings in the play folder: {}
+当前面板未在播放，无法录制声音	Panel is not playing; cannot record audio
+没有进行中的声音录制	No audio recording in progress
+开始录制声音：{}	Started audio recording: {}
+声音录制已保存：{}（{} 秒）	Audio recording saved: {} ({} s)
+开始录制声音失败：{}	Failed to start audio recording: {}
+创建声音录制目录失败：{}	Failed to create audio recording directory: {}
+声音处理：{label}	Audio processing: {label}
+规格化：{label}	Normalization: {label}
+晶化：{label}	Crystallization: {label}
+降噪：{label}	Noise reduction: {label}
+混响：{label}	Reverb: {label}
+语音消除：{label}	Vocal removal: {label}
+语音增强：{label}	Voice enhancement: {label}
+均衡器：{label}	Equalizer: {label}
+均衡器预置：{label}	Equalizer preset: {label}
+默认	Default
+流行	Pop
+摇滚	Rock
+古典	Classical
+舞曲	Dance
+低音增强	Bass boost
+高音增强	Treble boost
+人声	Vocal
+空设备(静音)	Null device (muted)
+声音输出方式：{label}	Audio output mode: {label}
+音量控制设置	Volume Control Settings
+最大音量	Maximum volume
+AC3/DTS 解码后放大	AC3/DTS post-decode gain
+音量最大可放大到 500%，过高可能产生削波失真。	Volume can be boosted up to 500%; excessive gain may clip.
+声音输出设置	Audio Output Settings
+默认输出设备	Default output device
+直通输出设备	Pass-through output device
+次输出设备	Secondary output device
+输出方式	Output method
+输出通道	Output channels
+2/0/0 - 2.0 立体声	2/0/0 - 2.0 stereo
+位深	Bit depth
+重采样率	Resample rate
+自动	Auto
+使用默认输出设备(推荐)	Use default output device (recommended)
+自动选择	Auto select
+音量控制设置：最大 {label}	Volume control settings: max {label}
+音量控制设置：最大 {label}%，AC3/DTS 放大 {label2} dB	Volume control settings: max {label}%, AC3/DTS boost {label2} dB
+AC3/DTS 音量处理：{label}	AC3/DTS volume processing: {label}
+AC3/DTS 音量处理：开（放大 {label} dB）	AC3/DTS volume processing: On (boost {label} dB)
+Pass Through 声音输出设备：{label}	Pass-through output device: {label}
+声音输出设置已应用	Audio output settings applied
+，AC3/DTS 放大 {label} dB	, AC3/DTS boost {label} dB
+开（放大 {label} dB）	On (boost {label} dB)
+声音同步	Audio sync
+声音语言	Audio language
+根据语言自动选择声音轨道	Select audio track by language
+接收器	Receiver
+AC3/DTS 直通到 S/PDIF/HDMI	Pass through AC3/DTS to S/PDIF/HDMI
+开启声音处理	Enable audio processing
+声音设置已应用	Audio settings applied
+中文	Chinese
+日本語	Japanese
+한국어	Korean
+剪贴板中没有可播放的内容	No playable content in the clipboard
+简索文件...	Files...
+简索字幕...	Subtitles...
+简索专辑...	Albums...
+简索地址...	URLs...
+简索 FTP/WebDAV/HTTP...	FTP/WebDAV/HTTP Servers...
+简索书签...	Bookmarks...
+简索菜单...	Menus...
+简索直播...	Broadcasts...
+简索播放中...	Current File...
+简索设置...	Navigation Settings...
+链接地址：	URL:
+默认打开：{label}	Default open: {label}
+打开链接	Open URL
+已加载次字幕 {name}（{count} 条）	Secondary subtitle loaded: {name} ({count} cues)
+书签	Bookmarks
+暂无书签	No bookmarks yet
+已删除书签	Bookmark removed
+清除	Clear
+简索菜单	Menus
+简索设置	Navigation Settings
+快进/快退步长（秒）：	Seek step (seconds):
+记住播放位置	Remember playback position
+在进度条上显示书签/章节标记	Show bookmark/chapter markers on the progress bar
+自动隐藏控制栏	Auto-hide the control bar
+快进/快退步长无效（1-600 秒）	Invalid seek step (1-600 seconds)
+简索设置已保存：快进/快退 {} 秒	Navigation settings saved: seek step {} s
+请先打开视频文件再载入音频	Open a video before loading external audio
+正在载入外部音频：{}	Loading external audio: {}
+已载入外部音频：{}	External audio loaded: {}
+无法载入外部音频：{}	Failed to load external audio: {}
+已恢复内置音频	Internal audio restored
+外部音频：{}	External audio: {}
+当前使用外部音频	Using external audio
+设置 A 点	Set point A
+设置 B 点	Set point B
+关闭 AB 循环	Turn off AB repeat
+播放列表中没有可切换的文件	No other files in the playlist
+窗口移动失败	Failed to move the window
+当前版本仅支持 3 个图像源	Only 3 image sources are supported
+当前窗口管理器不支持置顶	The window manager does not support always-on-top
+当前没有可录制的画面	Nothing to record
+当前 libmpv 不支持 AviSynth，脚本已记录	libmpv does not support AviSynth; the script was recorded
+还没有书签	No bookmarks yet
+剪贴板为空	The clipboard is empty
+剪贴板中没有文本	The clipboard contains no text
+没有可删除的截图	No screenshots to delete
+没有可删除的配置	No configurations to delete
+没有可生成缩略图的媒体	No media for thumbnail generation
+没有可重新打开的媒体	No media to reopen
+没有找到菜单项	No matching menu item
+请从「摄像头/其他设备」选择采集设备	Choose a capture device from "Camera/Other devices"
+图像 1：本地播放	Image 1: local playback
+文件夹中没有可播放的媒体文件	No playable media in the folder
+文件夹中没有可添加的媒体文件	No media to add in the folder
+文件已在播放列表中	The file is already in the playlist
+无法定位当前窗口	Cannot locate the current window
+无法读取窗口位置	Cannot read the window position
+无法获取文件路径	Cannot get the file path
+已关闭 AB 循环	AB repeat turned off
+已重载字幕	Subtitles reloaded
+帧位已复位	Frame position reset
+屏幕采集设置	Screen capture settings
+平滑滤镜	Smoothing filter
+选择更改图像尺寸时使用的滤镜。因使用平滑滤镜会造成CPU负载过高，所以如非必要请勿使用。	Choose the filter used when the image size changes. Smoothing filters put a heavy load on the CPU, so avoid them unless needed.
+不使用平滑滤镜	Do not use smoothing
+使用系统默认平滑滤镜(慢)	Use system default smoothing (slow)
+使用 PotPlayer 低品质平滑滤镜	Use PotPlayer low-quality smoothing
+使用 PotPlayer 普通品质平滑滤镜	Use PotPlayer normal-quality smoothing
+使用 PotPlayer 适中品质平滑滤镜	Use PotPlayer medium-quality smoothing
+使用 PotPlayer 高品质平滑滤镜	Use PotPlayer high-quality smoothing
+已设置 A 点：{position:.2} 秒	A point set: {position:.2} s
+已设置 B 点：{position:.2} 秒	B point set: {position:.2} s
+已复制：{text}	Copied: {text}
+已载入音频：{}	Audio loaded: {}
+已打开文件夹：{}	Folder opened: {}
+打开文件夹失败：{error}	Failed to open folder: {error}
+录制存档路径：{}	Recording folder: {}
+下边距：{}%	Bottom margin: {}%
+3D 输出：{label}	3D output: {label}
+视频渲染器：{label}	Video renderer: {label}
+录制失败：{error}	Recording failed: {error}
+创建录制目录失败：{error}	Failed to create recording folder: {error}
+开始录制：{}	Recording started: {}
+无法录制：{error}	Unable to record: {error}
+连续截图：{total} 张	Burst capture: {total} frames
+开始采集屏幕 {slot}#	Screen capture started (slot {slot})
+截屏 {slot} 尺寸：{width}×{height}	Screen {slot} size: {width}×{height}
+{prefix}: {choice}	{prefix}: {choice}
+已在浏览器中打开：{target}	Opened in browser: {target}
+无法启动浏览器：{error}	Unable to launch browser: {error}
+打开链接：{text}	Opening link: {text}
+默认打开方式：{label}	Default open action: {label}
+跳转书签：{}	Jumped to bookmark: {}
+打开书签：{file}	Opening bookmark: {file}
+没有找到菜单项：{query}	No menu item found: {query}
+打开方式：{label}	Open action: {label}
+界面语言：{label}	Interface language: {label}
+收尾方式：{}	End-of-playback action: {}
+关机方式：{label}	Shutdown mode: {label}
+已执行：systemctl {command_mode}	Executed: systemctl {command_mode}
+关机失败：{error}	Shutdown failed: {error}
+窗口位置：{}, {}	Window position: {}, {}
+已添加 {added} 个文件到播放列表	Added {added} files to the playlist
+已清空 {removed} 个播放列表项目（保留当前播放）	Cleared {removed} playlist items (current playback kept)
+裁剪：{label}	Crop: {label}
+自动旋转：{base}°/{}°	Auto rotate: {base}° / {}°
+缩略图：{}	Thumbnail: {}
+已保存配置：{name}	Configuration saved: {name}
+保存配置失败：{error}	Failed to save configuration: {error}
+已删除配置：{name}	Configuration deleted: {name}
+删除配置失败：{error}	Failed to delete configuration: {error}
+{name} 滤镜：关	{name} filter: off
+请先选择 {name} 脚本	Select a {name} script first
+{name} 滤镜：开	{name} filter: on
+{name} 滤镜加载失败：{error}	Failed to load {name} filter: {error}
+脚本：{}	Script: {}
+创建截图目录失败：{error}	Failed to create snapshot folder: {error}
+已截取：{}	Snapshot saved: {}
+截图格式：{format}	Snapshot format: {format}
+截图命名：{label}	Snapshot naming: {label}
+截图存档路径：{}	Snapshot folder: {}
+已删除：{}	Deleted: {}
+删除失败：{error}	Failed to delete: {error}
+已载入配置	Configuration loaded
+未打开媒体	No media opened
+拖入媒体文件即可播放	Drag media files here to play

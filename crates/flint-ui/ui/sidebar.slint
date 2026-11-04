@@ -1,0 +1,432 @@
+import { ScrollView } from "std-widgets.slint";
+import { Glyph } from "icons.slint";
+import { PanelInfo } from "capture_panel.slint";
+import { Translation } from "translation.slint";
+
+export struct BrowserItem {
+    name: string,
+    path: string,
+    is-dir: bool,
+}
+
+component SideTab inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> active: false;
+    callback picked;
+
+    background: root.active ? #3a3a3a : (ta.has-hover ? #303030 : transparent);
+    border-width: 1px;
+    border-color: #1d1d1d;
+
+    Text {
+        text: root.text;
+        color: root.active ? #f0f0f0 : #a8a8a8;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    ta := TouchArea {
+        clicked => { root.picked(); }
+    }
+}
+
+component AlbumTab inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback picked;
+
+    background: root.active ? #3a3a3a : (ta.has-hover && root.enabled ? #333333 : transparent);
+    border-width: 1px;
+    border-color: #1d1d1d;
+
+    Text {
+        text: root.text;
+        color: !root.enabled ? #7a7a7a : (root.active ? #ededed : #c4c4c4);
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.picked(); }
+    }
+}
+
+component ToolButton inherits Rectangle {
+    in property <string> text: "";
+    in property <int> glyph: -1;
+    in property <bool> enabled: true;
+    in property <length> button-width: 34px;
+    callback clicked;
+
+    width: root.button-width;
+    height: 24px;
+    border-radius: 3px;
+    background: ta.has-hover && root.enabled ? #383838 : transparent;
+
+    Glyph {
+        visible: root.glyph >= 0;
+        kind: root.glyph;
+        tint: root.enabled ? #c0c0c0 : #6b6b6b;
+        width: 12px;
+        height: 12px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    Text {
+        visible: root.glyph < 0;
+        text: root.text;
+        color: root.enabled ? #cfcfcf : #6b6b6b;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    in property <[PanelInfo]> panels: [];
+    in property <int> selected: -1;
+    in property <string> browser-path: "";
+    in property <[BrowserItem]> browser-items: [];
+    in property <color> accent: #4aa3ff;
+    in-out property <int> tab: 1;
+    in-out property <int> album: 0;
+    in-out property <int> browser-selected: -1;
+
+    callback close-sidebar;
+    callback item-picked(int);
+    callback add-requested;
+    callback delete-requested;
+    callback browser-navigate(string);
+    callback browser-open(string);
+    callback browser-up;
+
+    width: 284px;
+    background: #2d2d2d;
+    border-width: 1px;
+    border-color: #1a1a1a;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 30px;
+        background: #252525;
+
+        HorizontalLayout {
+            x: 1px;
+            width: parent.width - 2px;
+            height: parent.height;
+
+            SideTab {
+                width: 96px;
+                text: Translation.tr("浏览器", Translation.language-gen);
+                active: root.tab == 0;
+                picked => { root.tab = 0; }
+            }
+
+            SideTab {
+                width: 96px;
+                text: Translation.tr("播放列表", Translation.language-gen);
+                active: root.tab == 1;
+                picked => { root.tab = 1; }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            Rectangle {
+                width: 30px;
+                height: parent.height;
+                background: close-touch.has-hover ? #3a3a3a : transparent;
+
+                Glyph {
+                    kind: 17;
+                    tint: #a8a8a8;
+                    width: 11px;
+                    height: 11px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+
+                close-touch := TouchArea {
+                    clicked => { root.close-sidebar(); }
+                }
+            }
+        }
+
+        Rectangle {
+            x: 96px;
+            y: 0;
+            width: 2px;
+            height: 3px;
+            background: #f0c93c;
+            visible: root.tab == 1;
+        }
+
+        Rectangle {
+            x: 1px;
+            y: 0;
+            width: 2px;
+            height: 3px;
+            background: #f0c93c;
+            visible: root.tab == 0;
+        }
+    }
+
+    Rectangle {
+        y: 30px;
+        width: parent.width;
+        height: 26px;
+        background: #2d2d2d;
+        visible: root.tab == 1;
+
+        HorizontalLayout {
+            x: 1px;
+            width: parent.width - 2px;
+            height: parent.height;
+
+            AlbumTab {
+                width: 84px;
+                text: Translation.tr("默认专辑", Translation.language-gen);
+                active: root.album == 0;
+                picked => { root.album = 0; }
+            }
+
+            AlbumTab {
+                width: 72px;
+                text: Translation.tr("此电脑", Translation.language-gen);
+                active: root.album == 1;
+                picked => { root.album = 1; }
+            }
+
+            AlbumTab {
+                width: 88px;
+                text: Translation.tr("+ 新建专辑", Translation.language-gen);
+                enabled: false;
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+
+    Rectangle {
+        y: root.tab == 1 ? 56px : 30px;
+        width: parent.width;
+        height: parent.height - self.y - 32px;
+        background: transparent;
+        clip: true;
+
+        Rectangle {
+            visible: root.tab == 0;
+            y: 0;
+            width: parent.width;
+            height: 24px;
+            background: #252525;
+            border-width: 1px;
+            border-color: #1d1d1d;
+
+            up-touch := TouchArea {
+                x: 0;
+                y: 0;
+                width: 24px;
+                height: parent.height;
+                clicked => { root.browser-up(); }
+            }
+
+            Text {
+                x: 0;
+                y: 0;
+                width: 24px;
+                height: parent.height;
+                text: "↑";
+                color: up-touch.has-hover ? #f0f0f0 : #a8a8a8;
+                font-size: 13px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            Text {
+                x: 26px;
+                y: 0;
+                width: parent.width - 30px;
+                height: parent.height;
+                text: root.browser-path;
+                color: #c8c8c8;
+                font-size: 11px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        Rectangle {
+            visible: root.tab == 0;
+            y: 24px;
+            width: parent.width;
+            height: parent.height - 24px;
+            background: transparent;
+
+            ScrollView {
+                width: parent.width;
+                height: parent.height;
+
+                VerticalLayout {
+                    for item[i] in root.browser-items : Rectangle {
+                        height: 21px;
+                        background: i == root.browser-selected ? #3a3a3a
+                            : (item-touch.has-hover ? #333333 : transparent);
+
+                        Glyph {
+                            kind: item.is-dir ? 5 : 20;
+                            tint: item.is-dir ? #e0c25c : #a0a0a0;
+                            width: 12px;
+                            height: 12px;
+                            x: 8px;
+                            y: (parent.height - self.height) / 2;
+                        }
+
+                        Text {
+                            x: 26px;
+                            y: 0;
+                            width: parent.width - 34px;
+                            height: parent.height;
+                            text: item.name;
+                            color: item.is-dir ? #e8d48a : #d2d2d2;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        item-touch := TouchArea {
+                            clicked => { root.browser-selected = i; }
+                            double-clicked => {
+                                if (item.is-dir) {
+                                    root.browser-navigate(item.path);
+                                } else {
+                                    root.browser-open(item.path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            visible: root.tab == 1 && root.panels.length == 0;
+            x: 12px;
+            width: parent.width - 24px;
+            y: 12px;
+            text: Translation.tr("播放列表为空", Translation.language-gen);
+            color: #7a7a7a;
+            font-size: 12px;
+        }
+
+        ScrollView {
+            visible: root.tab == 1;
+            y: 4px;
+            width: parent.width;
+            height: parent.height - 8px;
+
+            VerticalLayout {
+                spacing: 0px;
+
+                for panel[i] in root.panels : Rectangle {
+                    height: 21px;
+                    background: i == root.selected ? #3a3a3a
+                        : (row-touch.has-hover ? #333333 : transparent);
+
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+                        width: 2px;
+                        height: parent.height;
+                        background: i == root.selected ? root.accent : transparent;
+                    }
+
+                    Glyph {
+                        kind: 20;
+                        tint: i == root.selected ? #d8d8d8 : #a0a0a0;
+                        width: 11px;
+                        height: 11px;
+                        x: 8px;
+                        y: (parent.height - self.height) / 2;
+                    }
+
+                    Text {
+                        x: 24px;
+                        width: parent.width - 96px;
+                        height: parent.height;
+                        text: (i + 1) + ". " + panel.title;
+                        color: i == root.selected ? #f0f0f0 : #d2d2d2;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        x: parent.width - 78px;
+                        width: 66px;
+                        height: parent.height;
+                        text: panel.fps;
+                        color: root.accent;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    row-touch := TouchArea {
+                        clicked => { root.item-picked(i); }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 32px;
+        width: parent.width;
+        height: 32px;
+        background: #252525;
+        border-width: 1px;
+        border-color: #1d1d1d;
+
+        HorizontalLayout {
+            x: 4px;
+            width: parent.width - 8px;
+            height: parent.height;
+            spacing: 2px;
+
+            ToolButton { glyph: 24; button-width: 24px; }
+            ToolButton { glyph: 23; button-width: 24px; }
+            Rectangle { width: 4px; }
+            ToolButton { text: Translation.tr("添加", Translation.language-gen); button-width: 44px; clicked => { root.add-requested(); } }
+            ToolButton {
+                text: Translation.tr("删除", Translation.language-gen);
+                button-width: 44px;
+                enabled: root.panels.length > 0 && root.selected >= 0;
+                clicked => { root.delete-requested(); }
+            }
+            ToolButton { text: Translation.tr("排序", Translation.language-gen); button-width: 44px; enabled: false; }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            ToolButton { glyph: 6; button-width: 26px; }
+        }
+    }
+}

@@ -49,9 +49,14 @@ impl Stats {
 
     pub fn record_frame(&self, at: Instant, decode_ms: f32) {
         self.frames.fetch_add(1, Ordering::Relaxed);
-        let mut window = self.window.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut window = self
+            .window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         window.arrivals.push_back(at);
-        window.decode_samples.push_back(decode_ms.clamp(0.0, 10_000.0));
+        window
+            .decode_samples
+            .push_back(decode_ms.clamp(0.0, 10_000.0));
         if window.decode_samples.len() > 64 {
             window.decode_samples.pop_front();
         }
@@ -67,7 +72,10 @@ impl Stats {
 
     pub fn record_bytes(&self, at: Instant, bytes: u64) {
         self.bytes.fetch_add(bytes, Ordering::Relaxed);
-        let mut window = self.window.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut window = self
+            .window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         window.byte_samples.push_back((at, bytes));
         while window
             .byte_samples
@@ -87,7 +95,10 @@ impl Stats {
         self.frames.store(0, Ordering::Relaxed);
         self.dropped.store(0, Ordering::Relaxed);
         self.bytes.store(0, Ordering::Relaxed);
-        let mut window = self.window.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut window = self
+            .window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         *window = Window::default();
     }
 
@@ -95,7 +106,10 @@ impl Stats {
         let frames = self.frames.load(Ordering::Relaxed);
         let dropped = self.dropped.load(Ordering::Relaxed);
         let bytes = self.bytes.load(Ordering::Relaxed);
-        let window = self.window.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = self
+            .window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let recent: Vec<&Instant> = window
             .arrivals
@@ -158,7 +172,11 @@ mod tests {
             stats.record_frame(start + Duration::from_millis(index * 33), 2.0);
         }
         let snapshot = stats.snapshot(start + Duration::from_secs(1));
-        assert!((snapshot.actual_fps - 30.0).abs() < 1.5, "{}", snapshot.actual_fps);
+        assert!(
+            (snapshot.actual_fps - 30.0).abs() < 1.5,
+            "{}",
+            snapshot.actual_fps
+        );
         assert_eq!(snapshot.frames, 31);
     }
 
@@ -170,7 +188,11 @@ mod tests {
         stats.record_bytes(start + Duration::from_millis(500), 500_000);
         stats.record_bytes(start + Duration::from_millis(1_500), 9_000_000);
         let snapshot = stats.snapshot(start + Duration::from_millis(1_600));
-        assert!((snapshot.bitrate_mbps - 72.0).abs() < 0.001, "{}", snapshot.bitrate_mbps);
+        assert!(
+            (snapshot.bitrate_mbps - 72.0).abs() < 0.001,
+            "{}",
+            snapshot.bitrate_mbps
+        );
     }
 
     #[test]

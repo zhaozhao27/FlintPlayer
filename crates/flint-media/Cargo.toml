@@ -13,4 +13,5 @@ crossbeam-channel.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
 libc.workspace = true
+encoding_rs.workspace = true
 log.workspace = true
