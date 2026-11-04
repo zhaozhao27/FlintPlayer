@@ -151,13 +151,51 @@ sudo usermod -aG video "$USER"
 
 ## Debian 打包
 
+打包工具依赖 `cargo-deb`（可通过 `cargo install cargo-deb` 安装），支持本地动态链接与发布版静态链接两种构建方式。
+
+### 1. 本地动态构建
+
+默认动态链接当前系统的 FFmpeg 库（如 `libavcodec`、`libavformat` 等），适合在本地开发或同版本发行版上使用：
+
 ```bash
-cargo install cargo-deb   # 仅首次
 cargo deb -p flintplayer-desktop
-sudo apt install ./target/debian/flintplayer_1.0.0-1_amd64.deb
 ```
 
-`depends = "$auto, fonts-noto-cjk"` 会让 `cargo-deb` 通过 `ldd` 自动补全 FFmpeg 等动态库依赖，并确保中文字体可用。
+### 2. 发布版静态构建
+
+官方发布包采用 FFmpeg 6.1.2 静态库编译，二进制不再依赖系统 `libavcodec`、`libavformat` 等动态库；仅依赖 `glibc >= 2.35`（不适用于 `musl`），实际支持 `glibc 2.36` 及以上的发行版。
+
+编译静态 FFmpeg 6.1.2 时需启用以下参数：
+
+```bash
+./configure \
+  --prefix=/path/to/ffmpeg-static \
+  --disable-autodetect \
+  --enable-static \
+  --disable-shared \
+  --enable-pic \
+  --enable-v4l2-m2m \
+  --enable-indev=v4l2
+make -j"$(nproc)" && make install
+```
+
+随后指定 `FFMPEG_DIR` 编译二进制并生成 `.deb` 包：
+
+```bash
+FFMPEG_DIR=/path/to/ffmpeg-static cargo build --release -p flintplayer-desktop --features static-ffmpeg
+cargo deb -p flintplayer-desktop --no-build
+```
+
+### 运行时依赖
+
+静态构建的 `.deb` 包不再依赖系统 FFmpeg 动态库，自动依赖仅保留：
+
+- `libmpv2 | libmpv1`
+- `libvulkan1`、`mesa-vulkan-drivers`
+- `libxkbcommon`、`libxcb`
+- `fonts-noto-cjk`
+
+`sudo apt install ./target/debian/flintplayer_1.0.0-1_amd64.deb` 即可安装。
 
 ## 架构
 
