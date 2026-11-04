@@ -20,6 +20,10 @@ gpui-kit = { git = "https://github.com/nyakang/gpui-kit", rev = "9143df9774d0190
 log.workspace = true
 x11rb = "0.13"
 env_logger.workspace = true
+libc.workspace = true
+
+[features]
+static-ffmpeg = ["flint-media/static-ffmpeg"]
 
 [package.metadata.deb]
 name = "flintplayer"
@@ -29,7 +33,8 @@ license-file = ["../../LICENSE", "4"]
 extended-description = "A sleek, low-latency USB V4L2 capture and PotPlayer-style media player for Linux. GPUI video canvas, libmpv playback engine, 1:1 PotPlayer menu/UX parity, and frame-accurate single-frame analysis."
 section = "video"
 priority = "optional"
-depends = "$auto, fonts-noto-cjk, libmpv2 | libmpv1"
+depends = "$auto, fonts-noto-cjk, libmpv2 | libmpv1, libvulkan1, mesa-vulkan-drivers"
+recommends = "zenity, ffmpeg, xdg-utils"
 assets = [
     ["target/release/flintplayer", "usr/bin/flintplayer", "755"],
     ["../../assets/flintplayer.desktop", "usr/share/applications/flintplayer.desktop", "644"],

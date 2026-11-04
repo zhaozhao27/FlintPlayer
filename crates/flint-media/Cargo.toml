@@ -15,3 +15,6 @@ thiserror.workspace = true
 libc.workspace = true
 encoding_rs.workspace = true
 log.workspace = true
+
+[features]
+static-ffmpeg = ["ffmpeg-next/static", "ffmpeg-next/device", "ffmpeg-next/filter"]

@@ -78,6 +78,15 @@ impl PlaylistController {
         self.add_files(files)
     }
 
+    pub fn sort_by_name(&mut self, reverse: bool) {
+        let current = self.current.and_then(|index| self.items.get(index).cloned());
+        self.items.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
+        if reverse {
+            self.items.reverse();
+        }
+        self.current = current.and_then(|path| self.items.iter().position(|item| item == &path));
+    }
+
     pub fn select(&mut self, index: usize) -> Option<PathBuf> {
         let path = self.items.get(index)?.clone();
         self.current = Some(index);

@@ -16,6 +16,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential pkg-config libclang-dev \
+          libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
+          libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
+          libwayland-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+          libvulkan-dev libasound2-dev
+    - uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build --verbose
     - name: Run tests

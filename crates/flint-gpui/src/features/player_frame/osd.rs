@@ -39,6 +39,7 @@ pub(super) struct CaptureData {
     pub dropped: u64,
     pub drop_percent: f64,
     pub decode_ms: f32,
+    pub latency_ms: f32,
     pub audio_codec: Option<String>,
 }
 
@@ -281,6 +282,11 @@ fn capture_rows(data: &CaptureData) -> Vec<OsdRow> {
                     WHITE,
                 ),
                 (format!("{:.2}ms", data.decode_ms), GREEN),
+                (tr(", 延迟: "), WHITE),
+                (
+                    format!("{:.1}ms", data.latency_ms),
+                    if data.latency_ms > 50.0 { RED } else { GREEN },
+                ),
                 (tr(", 码率: "), WHITE),
                 (format!("{:.2}Mbps", data.bitrate_mbps), GREEN),
             ],

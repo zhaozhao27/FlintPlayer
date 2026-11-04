@@ -38,6 +38,7 @@ pub struct PlaybackController {
     raw_input: Option<RawInput>,
     analysis: bool,
     frame_index: i64,
+    audio_device: String,
 }
 
 impl PlaybackController {
@@ -62,6 +63,7 @@ impl PlaybackController {
             raw_input: None,
             analysis: false,
             frame_index: 0,
+            audio_device: "auto".to_string(),
         }
     }
 
@@ -149,7 +151,10 @@ impl PlaybackController {
         let analysis = self.analysis;
         let result = match self.player.as_ref() {
             Some(player) => apply_raw_input(player, self.raw_input.as_ref())
-                .and_then(|()| player.open(&path))
+                .and_then(|()| {
+                    let _ = player.set_property("audio-device", &self.audio_device);
+                    player.open(&path)
+                })
                 .and_then(|()| {
                     if analysis {
                         player.pause()
@@ -164,6 +169,18 @@ impl PlaybackController {
             Ok(()) => self.error = None,
             Err(error) => self.error = Some(error.to_string()),
         }
+        cx.notify();
+    }
+
+    pub fn configure_audio_device(&mut self, device: &str) {
+        self.audio_device = device.to_string();
+        if let Some(player) = self.player.as_ref() {
+            let _ = player.set_property("audio-device", device);
+        }
+    }
+
+    pub fn set_audio_device(&mut self, device: &str, cx: &mut Context<Self>) {
+        self.configure_audio_device(device);
         cx.notify();
     }
 

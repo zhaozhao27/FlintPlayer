@@ -148,7 +148,12 @@ impl PlayerFrameController {
             pitch: config.pano_pitch.to_radians(),
             fov: config.pano_fov.to_radians(),
         });
-        let playback = cx.new(|_| PlaybackController::new());
+        let initial_audio_device = config.audio_output_method.clone();
+        let playback = cx.new(|_| {
+            let mut playback = PlaybackController::new();
+            playback.configure_audio_device(&initial_audio_device);
+            playback
+        });
         playback.update(cx, |playback, cx| {
             playback.set_stereo(stereo_mode, cx);
             playback.set_pano(pano_view, cx);
@@ -393,6 +398,29 @@ impl PlayerFrameController {
             "playlist-add-file" => self.prompt_add_files(cx),
             "playlist-add-folder" => self.prompt_add_folder(cx),
             "playlist-clear" => self.clear_playlist(cx),
+            "playlist-sort-name" | "playlist-sort-reverse" => {
+                let reverse = action == "playlist-sort-reverse";
+                self.playlist.update(cx, |playlist, cx| {
+                    playlist.sort_by_name(reverse);
+                    cx.notify();
+                });
+                self.show_notice(
+                    if reverse { "播放列表已按文件名反序" } else { "播放列表已按文件名正序" },
+                    cx,
+                );
+            }
+            action if action.starts_with("audio-device:") => {
+                let device = action.trim_start_matches("audio-device:");
+                self.config.audio_output_method = device.to_string();
+                self.save_config();
+                self.playback.update(cx, |playback, cx| {
+                    playback.set_audio_device(device, cx);
+                });
+                self.show_notice(
+                    format!("声音输出设备：{device}"),
+                    cx,
+                );
+            }
             "toggle-sidebar" => self.toggle_sidebar(cx),
             "seek-start" => self
                 .playback
@@ -737,6 +765,22 @@ impl PlayerFrameController {
                     format!(
                         "录制存入播放文件夹：{}",
                         if self.config.video_record_play_folder { "开" } else { "关" }
+                    ),
+                    cx,
+                );
+            }
+            "audio-record-toggle" => self.toggle_audio_recording(cx),
+            "audio-open-folder" => {
+                let folder = self.config.audio_record_dir.clone();
+                self.open_folder(&folder, cx);
+            }
+            "audio-record-play-folder-toggle" => {
+                self.config.audio_record_play_folder = !self.config.audio_record_play_folder;
+                self.save_config();
+                self.show_notice(
+                    format!(
+                        "声音录制存入播放文件夹：{}",
+                        if self.config.audio_record_play_folder { "开" } else { "关" }
                     ),
                     cx,
                 );
@@ -1353,6 +1397,60 @@ impl PlayerFrameController {
         match result {
             Ok(()) => self.show_notice(crate::i18n::trf("开始录制：{}", &[&path.display()]), cx),
             Err(error) => self.show_notice(crate::i18n::trf("无法录制：{error}", &[&error]), cx),
+        }
+    }
+
+    fn toggle_audio_recording(&mut self, cx: &mut Context<Self>) {
+        if self.capture.read(cx).is_audio_recording() {
+            let result = self.capture.read(cx).stop_audio_recording();
+            match result {
+                Some(Ok(summary)) => self.show_notice(
+                    format!(
+                        "声音录制已保存：{}（{:.1} 秒）",
+                        summary.path.display(),
+                        summary.seconds
+                    ),
+                    cx,
+                ),
+                Some(Err(error)) => {
+                    self.show_notice(crate::i18n::trf("声音录制失败：{error}", &[&error]), cx)
+                }
+                None => self.show_notice("没有进行中的声音录制", cx),
+            }
+            return;
+        }
+        let mut directory = self.config.audio_record_dir.clone();
+        if self.config.audio_record_play_folder {
+            let current = {
+                let playlist = self.playlist.read(cx);
+                playlist
+                    .current()
+                    .and_then(|index| playlist.items().get(index).cloned())
+            };
+            if let Some(parent) = current.as_deref().and_then(Path::parent) {
+                directory = parent.to_path_buf();
+            }
+        }
+        if let Err(error) = std::fs::create_dir_all(&directory) {
+            self.show_notice(crate::i18n::trf("创建声音录制目录失败：{error}", &[&error]), cx);
+            return;
+        }
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or(0);
+        let path = directory.join(format!("audio_{millis}.wav"));
+        let rate = if self.config.audio_output_rate == 0 {
+            48_000
+        } else {
+            self.config.audio_output_rate
+        };
+        let result = self.capture.read(cx).start_audio_recording(&path, rate);
+        match result {
+            Ok(()) => self.show_notice(format!("开始录制声音：{}", path.display()), cx),
+            Err(error) => {
+                self.show_notice(crate::i18n::trf("开始录制声音失败：{error}", &[&error]), cx)
+            }
         }
     }
 
@@ -2646,6 +2744,12 @@ impl PlayerFrameController {
             ("margin-auto-toggle", self.margin_auto),
             ("margin-force-toggle", self.margin_force),
             ("video-record-play-folder", self.config.video_record_play_folder),
+            ("audio-record-play-folder-toggle", self.config.audio_record_play_folder),
+            ("audio-device:auto", self.config.audio_output_method == "auto"),
+            ("audio-device:pulse", self.config.audio_output_method == "pulse"),
+            ("audio-device:alsa", self.config.audio_output_method == "alsa"),
+            ("audio-device:jack", self.config.audio_output_method == "jack"),
+            ("audio-device:null", self.config.audio_output_method == "null"),
             ("avisynth-toggle", self.config.avisynth_enabled),
             ("vapoursynth-toggle", self.config.vapoursynth_enabled),
         ] {

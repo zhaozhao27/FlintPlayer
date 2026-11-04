@@ -454,6 +454,7 @@ impl PlayerFrameController {
                         dropped: stats.dropped,
                         drop_percent: stats.drop_percent,
                         decode_ms: stats.decode_ms,
+                        latency_ms: capture.latency_ms(),
                         audio_codec: None,
                     })
                 } else {

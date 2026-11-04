@@ -5,6 +5,32 @@ mod menu;
 mod theme;
 mod x11;
 
+// Rust 标准库以弱符号引用 glibc 2.39 新增的 pidfd_spawnp/pidfd_getpid。
+// 这里提供本地实现，让链接器不再记录 GLIBC_2.39 版本需求，
+// 从而把二进制的 glibc 下限压到 2.34，兼容 glibc 2.36 及以上的发行版。
+use std::ffi::c_char;
+use std::os::raw::c_int;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pidfd_spawnp(
+    _pid: *mut c_int,
+    _path: *const c_char,
+    _file_actions: *const u8,
+    _attrp: *const u8,
+    _argv: *const *mut c_char,
+    _envp: *const *mut c_char,
+    _pidfd: *mut c_int,
+) -> c_int {
+    unsafe { *libc::__errno_location() = libc::ENOSYS };
+    -1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pidfd_getpid(_pidfd: c_int) -> c_int {
+    unsafe { *libc::__errno_location() = libc::EINVAL };
+    -1
+}
+
 use std::path::PathBuf;
 
 use features::playback::RawInput;

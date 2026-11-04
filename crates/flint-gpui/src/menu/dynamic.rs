@@ -124,8 +124,38 @@ fn play_menu(data: &MenuData) -> MenuEntry {
             MenuEntry::submenu(
                 "播放列表",
                 vec![
-                    MenuEntry::action("添加文件...", "playlist-add-file"),
-                    MenuEntry::action("添加文件夹...", "playlist-add-folder").with_shortcut("F2"),
+                    MenuEntry::submenu(
+                        "添加",
+                        vec![
+                            MenuEntry::action("添加文件...", "playlist-add-file"),
+                            MenuEntry::action("添加文件夹...", "playlist-add-folder")
+                                .with_shortcut("F2"),
+                        ],
+                    ),
+                    MenuEntry::submenu(
+                        "编辑",
+                        vec![
+                            MenuEntry::action("移除所选名单", "").disabled(),
+                            MenuEntry::action("编辑列表...", "").disabled(),
+                        ],
+                    ),
+                    MenuEntry::submenu(
+                        "专辑",
+                        vec![
+                            MenuEntry::action("新建专辑...", "").disabled(),
+                            MenuEntry::action("编辑专辑...", "").disabled(),
+                            MenuEntry::action("删除专辑", "").disabled(),
+                            MenuEntry::action("播放自选专辑", "").disabled(),
+                            MenuEntry::action("打开列表文件夹...", "").disabled(),
+                        ],
+                    ),
+                    MenuEntry::submenu(
+                        "排序",
+                        vec![
+                            MenuEntry::action("按文件名正序", "playlist-sort-name"),
+                            MenuEntry::action("按文件名反序", "playlist-sort-reverse"),
+                        ],
+                    ),
                     MenuEntry::action("清空播放列表", "playlist-clear"),
                 ],
             ),
@@ -187,6 +217,26 @@ fn sound_menu(data: &MenuData) -> MenuEntry {
     items.push(MenuEntry::action("音量增大", "volume-up").with_shortcut("↑"));
     items.push(MenuEntry::action("音量减小", "volume-down").with_shortcut("↓"));
     items.push(MenuEntry::action("静音", "mute-toggle").with_shortcut("M"));
+    items.push(MenuEntry::separator());
+    items.push(MenuEntry::submenu(
+        "声音输出方式",
+        vec![
+            MenuEntry::action("自动选择(推荐)", "audio-device:auto"),
+            MenuEntry::action("PulseAudio", "audio-device:pulse"),
+            MenuEntry::action("ALSA", "audio-device:alsa"),
+            MenuEntry::action("JACK", "audio-device:jack"),
+            MenuEntry::action("空设备(静音)", "audio-device:null"),
+        ],
+    ));
+    items.push(MenuEntry::submenu(
+        "音轨",
+        vec![
+            MenuEntry::action("声音录制...", "audio-record-toggle").with_shortcut("Shift+G"),
+            MenuEntry::action("立即开始录制声音...", "audio-record-toggle"),
+            MenuEntry::action("打开声音录制存档文件夹", "audio-open-folder"),
+            MenuEntry::action("条件允许时储存在播放文件夹", "audio-record-play-folder-toggle"),
+        ],
+    ));
     MenuEntry::submenu("声音", items)
 }
 

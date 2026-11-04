@@ -1,7 +1,10 @@
+use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use flint_media::{CaptureEngine, CaptureSettings, CaptureSmoothing, Shared, SourceInfo};
+use flint_media::{
+    AudioRecordSummary, CaptureEngine, CaptureSettings, CaptureSmoothing, Shared, SourceInfo,
+};
 use gpui::*;
 
 pub struct CaptureController {
@@ -18,6 +21,8 @@ pub struct CaptureController {
     dirty: bool,
     error: Option<String>,
     ticker_started: bool,
+    pending_captured: Option<Instant>,
+    latency_ms: f32,
 }
 
 impl CaptureController {
@@ -36,6 +41,8 @@ impl CaptureController {
             dirty: false,
             error: None,
             ticker_started: false,
+            pending_captured: None,
+            latency_ms: 0.0,
         }
     }
 
@@ -209,12 +216,41 @@ impl CaptureController {
             destination[3] = 255;
         }
         self.frame_size = Some((width, height));
+        self.pending_captured = Some(frame.captured_at);
         self.dirty = true;
+    }
+
+    pub fn latency_ms(&self) -> f32 {
+        self.latency_ms
+    }
+
+    pub fn is_audio_recording(&self) -> bool {
+        self.engine
+            .as_ref()
+            .map(|engine| engine.is_audio_recording())
+            .unwrap_or(false)
+    }
+
+    pub fn start_audio_recording(&self, path: &Path, rate: u32) -> Result<(), String> {
+        self.engine
+            .as_ref()
+            .ok_or_else(|| "当前没有采集音频可录制".to_string())?
+            .start_audio_recording(path, rate)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn stop_audio_recording(&self) -> Option<Result<AudioRecordSummary, String>> {
+        self.engine
+            .as_ref()
+            .and_then(|engine| engine.stop_audio_recording())
     }
 
     pub fn upload_frame(&mut self, window: &mut Window) {
         if !self.dirty {
             return;
+        }
+        if let Some(captured) = self.pending_captured.take() {
+            self.latency_ms = captured.elapsed().as_secs_f32() * 1000.0;
         }
         let Some((width, height)) = self.frame_size else {
             return;
