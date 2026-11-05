@@ -6,5 +6,5 @@ pub mod sysinfo;
 
 pub use command::CaptureCommand;
 pub use config::Config;
-pub use device::{scan_devices, DeviceInfo, FormatInfo, Resolution};
+pub use device::{scan_devices, CaptureMode, DeviceInfo, FormatInfo, Resolution};
 pub use stats::{Stats, StatsSnapshot};

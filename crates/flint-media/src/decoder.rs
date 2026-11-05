@@ -1,6 +1,6 @@
 use crate::capture_stream::{self, StreamSource};
 use crate::capture_v4l2::{CaptureCodec, RawFormat, V4l2Stream};
-use crate::latest_slot::Frame;
+use crate::latest_slot::{Frame, Nv12Planes};
 use crate::{CaptureSettings, CaptureSmoothing, Shared, SourceInfo};
 use crossbeam_channel::Sender;
 use ffmpeg::codec::decoder::Video as VideoDecoder;
@@ -612,6 +612,9 @@ struct Converter {
     raw: Option<RawVideoFrame>,
     spare: Vec<u8>,
     reported_format: Option<Pixel>,
+    output_format: Pixel,
+    yuv_unsupported: bool,
+    yuv_logged: bool,
 }
 
 impl Converter {
@@ -625,6 +628,9 @@ impl Converter {
             raw: None,
             spare: Vec::new(),
             reported_format: None,
+            output_format: Pixel::RGBA,
+            yuv_unsupported: false,
+            yuv_logged: false,
         }
     }
 
@@ -764,7 +770,23 @@ impl Converter {
                 .unwrap_or("unknown");
             shared.note_pixel_format(name);
         }
-        self.ensure_scaler(frame.format(), width, height)?;
+        if shared.yuv_output()
+            && !shared.is_recording()
+            && !self.yuv_unsupported
+            && width % 2 == 0
+            && height % 2 == 0
+        {
+            match self.convert_nv12(frame, shared, captured_at, pts) {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    log::warn!("NV12 直出不可用，回退 RGBA：{error}");
+                    self.yuv_unsupported = true;
+                    shared.set_yuv_output(false);
+                }
+            }
+        }
+
+        self.ensure_scaler(frame.format(), width, height, Pixel::RGBA)?;
         let scaler = self
             .scaler
             .as_mut()
@@ -796,6 +818,7 @@ impl Converter {
             width: width as usize,
             height: height as usize,
             rgba,
+            nv12: None,
             pts,
             captured_at,
             serial: 0,
@@ -804,24 +827,97 @@ impl Converter {
         Ok(())
     }
 
-    fn ensure_scaler(&mut self, format: Pixel, width: u32, height: u32) -> Result<(), String> {
+    fn convert_nv12(
+        &mut self,
+        frame: &RawVideoFrame,
+        shared: &Shared,
+        captured_at: Instant,
+        pts: f64,
+    ) -> Result<(), String> {
+        let width = frame.width() as usize;
+        let height = frame.height() as usize;
+        self.ensure_scaler(frame.format(), width as u32, height as u32, Pixel::NV12)?;
+        let scaler = self
+            .scaler
+            .as_mut()
+            .ok_or_else(|| "缩放器未初始化".to_string())?;
+        let output = self
+            .output
+            .as_mut()
+            .ok_or_else(|| "输出帧未初始化".to_string())?;
+        scaler
+            .run(frame, output)
+            .map_err(|error| format!("NV12 转换失败：{error}"))?;
+
+        let chroma_height = height.div_ceil(2);
+        let y_row = width;
+        let uv_row = width.div_ceil(2) * 2;
+        let mut planes = shared.slot.acquire_planes().unwrap_or_else(|| Nv12Planes {
+            y: Vec::new(),
+            uv: Vec::new(),
+            y_stride: 0,
+            uv_stride: 0,
+        });
+        planes.y.resize(y_row * height, 0);
+        planes.uv.resize(uv_row * chroma_height, 0);
+
+        let luma_stride = output.stride(0);
+        let luma = output.data(0);
+        for row in 0..height {
+            let start = row * luma_stride;
+            planes.y[row * y_row..(row + 1) * y_row].copy_from_slice(&luma[start..start + y_row]);
+        }
+        let chroma_stride = output.stride(1);
+        let chroma = output.data(1);
+        for row in 0..chroma_height {
+            let start = row * chroma_stride;
+            planes.uv[row * uv_row..(row + 1) * uv_row]
+                .copy_from_slice(&chroma[start..start + uv_row]);
+        }
+        planes.y_stride = y_row;
+        planes.uv_stride = uv_row;
+        if !self.yuv_logged {
+            self.yuv_logged = true;
+            log::info!("采集 NV12 直出已启用：{width}x{height}");
+        }
+
+        shared.publish_frame(Frame {
+            width,
+            height,
+            rgba: Vec::new(),
+            nv12: Some(planes),
+            pts,
+            captured_at,
+            serial: 0,
+        });
+        Ok(())
+    }
+
+    fn ensure_scaler(
+        &mut self,
+        format: Pixel,
+        width: u32,
+        height: u32,
+        target: Pixel,
+    ) -> Result<(), String> {
         let key = (format, width, height, self.scaler_flags);
-        if self.scaler_key == Some(key) && self.scaler.is_some() {
+        if self.scaler_key == Some(key) && self.scaler.is_some() && self.output_format == target {
             return Ok(());
         }
         let scaler = scaling::Context::get(
             format,
             width,
             height,
-            Pixel::RGBA,
+            target,
             width,
             height,
             self.scaler_flags,
         )
-        .map_err(|error| format!("创建 RGBA 缩放器失败：{error}"))?;
+        .map_err(|error| format!("创建缩放器失败：{error}"))?;
         self.scaler = Some(scaler);
-        self.output = Some(RawVideoFrame::new(Pixel::RGBA, width, height));
+        self.output = Some(RawVideoFrame::new(target, width, height));
         self.scaler_key = Some(key);
+        self.output_format = target;
         Ok(())
     }
 }
@@ -1028,4 +1124,78 @@ fn copy_plane(
         dst[target..target + len].copy_from_slice(&data[start..start + len]);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_yuyv_publishes_nv12_when_enabled() {
+        let shared = Shared::new();
+        shared.set_yuv_output(true);
+        let mut converter = Converter::new(CaptureSmoothing::None);
+        let mut budget = DecodeBudget::new();
+        let mut state = FeedState {
+            shared: &shared,
+            failures: &mut budget,
+        };
+        let mut data = vec![128u8; 8 * 4];
+        for byte in data.iter_mut().step_by(2) {
+            *byte = 100;
+        }
+        converter
+            .feed(
+                CaptureCodec::Raw(RawFormat::Yuyv422),
+                &data,
+                FrameShape {
+                    width: 4,
+                    height: 4,
+                    stride: 8,
+                },
+                Instant::now(),
+                0.0,
+                &mut state,
+            )
+            .expect("raw frame converts");
+
+        let frame = shared.slot.take().expect("frame published");
+        assert!(frame.rgba.is_empty());
+        let planes = frame.nv12.as_ref().expect("nv12 planes");
+        assert_eq!((frame.width, frame.height), (4, 4));
+        assert_eq!((planes.y_stride, planes.uv_stride), (4, 4));
+        assert_eq!(planes.y.len(), 16);
+        assert_eq!(planes.uv.len(), 8);
+        assert!(planes.y.iter().all(|&value| value == planes.y[0]));
+    }
+
+    #[test]
+    fn odd_dimensions_fall_back_to_rgba() {
+        let shared = Shared::new();
+        shared.set_yuv_output(true);
+        let mut converter = Converter::new(CaptureSmoothing::None);
+        let mut budget = DecodeBudget::new();
+        let mut state = FeedState {
+            shared: &shared,
+            failures: &mut budget,
+        };
+        converter
+            .feed(
+                CaptureCodec::Raw(RawFormat::Gray8),
+                &[64u8; 5 * 3],
+                FrameShape {
+                    width: 5,
+                    height: 3,
+                    stride: 5,
+                },
+                Instant::now(),
+                0.0,
+                &mut state,
+            )
+            .expect("raw frame converts");
+
+        let frame = shared.slot.take().expect("frame published");
+        assert!(frame.nv12.is_none());
+        assert_eq!(frame.rgba.len(), 5 * 3 * 4);
+    }
 }

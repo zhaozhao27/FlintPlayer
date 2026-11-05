@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/flint-core",
     "crates/flint-media",
-#     "crates/flint-ui",
     "crates/flint-gpui",
     "crates/flint-engine",
 ]
@@ -30,8 +29,25 @@ libloading = "0.8"
 env_logger = "0.11"
 dirs = "6"
 image = { version = "0.25", default-features = false, features = ["png"] }
-slint = { version = "1.18", features = ["unstable-winit-030"] }
-slint-build = "1.18"
+
+[patch."https://github.com/nyakang/zed"]
+gpui = { version = "=0.2.2", git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_apple = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_ios = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_linux = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_macos = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_macros = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_platform = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_util = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_web = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_wgpu = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+gpui_windows = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+collections = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+http_client = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+scheduler = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+sum_tree = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+ztracing = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
+ztracing_macro = { git = "https://github.com/zhaozhao27/zed", rev = "9077e66fc3f27ef916e7a922535c16bc07f7dd96" }
 
 [profile.dev]
 opt-level = 1

@@ -51,15 +51,23 @@ pub fn settings_overlay(
             .map(|device| format!("{} ({})", device.name, device.path.display()))
             .collect::<Vec<_>>();
         let format_names = controller
-            .formats()
+            .modes()
             .iter()
-            .map(|format| format!("{} - {}", format.fourcc, format.description))
+            .map(|mode| {
+                format!(
+                    "{} {}×{}@{}",
+                    mode.fourcc,
+                    mode.width,
+                    mode.height,
+                    format_fps(mode.fps)
+                )
+            })
             .collect::<Vec<_>>();
         (
             device_names,
             controller.device_index(),
             format_names,
-            controller.format_index(),
+            controller.mode_index(),
             controller.tab(),
             controller.dropdown(),
         )
@@ -257,7 +265,7 @@ pub fn settings_overlay(
             dropdown_popup(
                 334.0,
                 142.0,
-                160.0,
+                310.0,
                 &format_names,
                 settings,
                 DropdownKind::Format,
@@ -438,7 +446,7 @@ fn camera_tab(
     let format_dropdown = dropdown_box(
         326.0,
         58.0,
-        160.0,
+        310.0,
         format_label,
         format_placeholder,
         true,
@@ -671,18 +679,11 @@ fn dropdown_popup(
     options: &[String],
     settings: &Entity<SettingsController>,
     kind: DropdownKind,
-) -> Div {
-    let mut list = div()
-        .absolute()
-        .left(px(left))
-        .top(px(top))
-        .w(px(width))
-        .h(px(options.len() as f32 * 20.0 + 2.0))
-        .bg(rgb(CONTROL_BG))
-        .border_1()
-        .border_color(rgb(BUTTON_BORDER));
+) -> AnyElement {
+    let full_height = options.len() as f32 * 20.0 + 2.0;
+    let mut inner = div().relative().w_full().h(px(full_height));
     for (index, option) in options.iter().enumerate() {
-        list = list.child(
+        inner = inner.child(
             div()
                 .id(("settings-option", index))
                 .absolute()
@@ -706,14 +707,34 @@ fn dropdown_popup(
                     move |_, _, cx: &mut App| {
                         settings.update(cx, |settings, cx| match kind {
                             DropdownKind::Device => settings.select_device(index, cx),
-                            DropdownKind::Format => settings.select_format(index, cx),
+                            DropdownKind::Format => settings.select_mode(index, cx),
                         });
                     }
                 })
                 .child(option.clone()),
         );
     }
-    list
+    div()
+        .absolute()
+        .left(px(left))
+        .top(px(top))
+        .w(px(width))
+        .h(px(full_height.min(360.0)))
+        .id("settings-dropdown-popup")
+        .overflow_y_scroll()
+        .bg(rgb(CONTROL_BG))
+        .border_1()
+        .border_color(rgb(BUTTON_BORDER))
+        .child(inner)
+        .into_any_element()
+}
+
+fn format_fps(fps: f64) -> String {
+    if (fps - fps.round()).abs() < 0.01 {
+        format!("{:.0}", fps)
+    } else {
+        format!("{fps:.2}").trim_end_matches('0').trim_end_matches('.').to_string()
+    }
 }
 
 fn group(left: f32, top: f32, width: f32, height: f32, title: &str) -> Div {

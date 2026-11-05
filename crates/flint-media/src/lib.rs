@@ -161,6 +161,7 @@ pub struct Shared {
     last_pts: Mutex<f64>,
     seek_target: Mutex<Option<f64>>,
     video_renderer: AtomicU8,
+    yuv_output: AtomicBool,
     speed: AtomicU32,
     volume: AtomicU32,
     muted: AtomicBool,
@@ -199,6 +200,7 @@ impl Shared {
             last_pts: Mutex::new(0.0),
             seek_target: Mutex::new(None),
             video_renderer: AtomicU8::new(0),
+            yuv_output: AtomicBool::new(false),
             speed: AtomicU32::new(1.0f32.to_bits()),
             volume: AtomicU32::new(1.0f32.to_bits()),
             muted: AtomicBool::new(false),
@@ -288,6 +290,14 @@ impl Shared {
 
     pub fn video_renderer_compressed(&self) -> bool {
         self.video_renderer.load(Ordering::Acquire) == 1
+    }
+
+    pub fn set_yuv_output(&self, enabled: bool) {
+        self.yuv_output.store(enabled, Ordering::Release);
+    }
+
+    pub fn yuv_output(&self) -> bool {
+        self.yuv_output.load(Ordering::Acquire)
     }
 
     pub fn volume(&self) -> f32 {
@@ -598,8 +608,10 @@ impl Shared {
     }
 
     pub fn publish_frame(&self, frame: Frame) -> Option<Vec<u8>> {
-        if let Some(recorder) = self.recorder.lock().as_ref() {
-            recorder.push(&frame.rgba);
+        if !frame.rgba.is_empty() {
+            if let Some(recorder) = self.recorder.lock().as_ref() {
+                recorder.push(&frame.rgba);
+            }
         }
         *self.last_pts.lock() = frame.pts;
         let before = self.slot.dropped();

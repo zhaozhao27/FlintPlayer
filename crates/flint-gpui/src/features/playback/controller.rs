@@ -499,6 +499,7 @@ impl PlaybackController {
                     width: width_usize,
                     height: height_usize,
                     rgba: pixels,
+                    nv12: None,
                     pts: 0.0,
                     captured_at: std::time::Instant::now(),
                     serial: 0,

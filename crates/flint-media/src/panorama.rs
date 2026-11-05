@@ -162,6 +162,7 @@ mod tests {
             width,
             height,
             rgba,
+            nv12: None,
             pts: 0.0,
             captured_at: Instant::now(),
             serial: 0,

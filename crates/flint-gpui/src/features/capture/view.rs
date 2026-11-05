@@ -8,14 +8,19 @@ pub fn video_canvas(
     capture: &Entity<CaptureController>,
     cx: &mut Context<PlayerFrameController>,
 ) -> AnyElement {
-    let (texture, size, error) = {
+    let (yuv, texture, size, error) = {
         let capture = capture.read(cx);
         (
+            capture.yuv_frame(),
             capture.texture(),
             capture.texture_size(),
             capture.error().map(str::to_string),
         )
     };
+
+    if let Some(frame) = yuv {
+        return surface(frame).size_full().into_any_element();
+    }
 
     if let (Some(texture), Some((width, height))) = (texture, size) {
         return canvas(

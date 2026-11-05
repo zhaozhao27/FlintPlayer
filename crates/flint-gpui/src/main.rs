@@ -112,6 +112,12 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
+    image::load_from_memory(include_bytes!("../../../assets/icons/flintplayer.png"))
+        .ok()
+        .map(|icon| std::sync::Arc::new(icon.to_rgba8()))
+}
+
 fn main() {
     env_logger::init();
     let launch = parse_args();
@@ -128,6 +134,8 @@ fn main() {
                 appears_transparent: true,
                 traffic_light_position: None,
             }),
+            app_id: Some("flintplayer".into()),
+            icon: window_icon(),
             ..WindowOptions::default()
         };
         let window = gpui_kit::open_window(options, cx, move |_, cx| {

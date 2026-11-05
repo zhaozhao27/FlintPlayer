@@ -186,6 +186,16 @@ FFMPEG_DIR=/path/to/ffmpeg-static cargo build --release -p flintplayer-desktop -
 cargo deb -p flintplayer-desktop --no-build
 ```
 
+### LGPL 合规
+
+FlintPlayer（基于 Rust + GPUI 的 Linux 播放器）发布二进制以静态方式链接 FFmpeg 6.1.2，遵循 LGPL-2.1-or-later（LGPL v2.1+）许可证。
+发布版提供确切的构建步骤、FFmpeg 源码（https://ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz）及相关 configure 选项，以便接收者可以重新链接：
+```bash
+./configure --prefix=/path/to/ffmpeg-static --disable-autodetect --enable-static --disable-shared --enable-pic --enable-v4l2-m2m --enable-indev=v4l2
+FFMPEG_DIR=/path/to/ffmpeg-static cargo build --release -p flintplayer-desktop --features static-ffmpeg
+```
+维护者可应请求提供目标文件（object files）或重链接脚本，联系方式：flint.lzzhang@ingenic.com。
+
 ### 运行时依赖
 
 静态构建的 `.deb` 包不再依赖系统 FFmpeg 动态库，自动依赖仅保留：
@@ -232,9 +242,8 @@ V4L2 / 网络流
 ```
 crates/flint-core     设备枚举、命令、统计、配置
 crates/flint-media    V4L2/网络采集、FFmpeg 解码、最新帧槽
-crates/flint-gpui      GPUI 界面、快捷键、菜单树、应用装配
-crates/flint-engine    libmpv 播放引擎
-crates/flint-ui        旧 Slint 界面（已从 workspace 移除，保留备查）
+crates/flint-gpui     GPUI 界面、快捷键、菜单树、应用装配
+crates/flint-engine   libmpv 播放引擎
 assets                .desktop 启动器与 256×256 图标
 ```
 

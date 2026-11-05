@@ -448,6 +448,11 @@ impl PlayerFrameController {
                         nominal_fps: info.nominal_fps,
                         bitrate_mbps: stats.bitrate_mbps,
                         decoded,
+                        display_format: if capture.yuv_frame().is_some() {
+                            "NV12".to_string()
+                        } else {
+                            "RGBA".to_string()
+                        },
                         output_width,
                         output_height,
                         actual_fps: stats.actual_fps,

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 const VIDIOC_QUERYCAP: libc::c_ulong = 0x8068_5600;
 const VIDIOC_ENUM_FMT: libc::c_ulong = 0xc040_5602;
 const VIDIOC_ENUM_FRAMESIZES: libc::c_ulong = 0xc02c_564a;
+const VIDIOC_ENUM_FRAMEINTERVALS: libc::c_ulong = 0xc034_564b;
 
 const V4L2_BUF_TYPE_VIDEO_CAPTURE: u32 = 1;
 const V4L2_CAP_VIDEO_CAPTURE: u32 = 0x0000_0001;
@@ -16,6 +17,15 @@ const V4L2_FMT_FLAG_COMPRESSED: u32 = 0x0000_0004;
 pub struct Resolution {
     pub width: u32,
     pub height: u32,
+}
+
+/// A format/resolution/frame-rate combination exposed by a capture device.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CaptureMode {
+    pub fourcc: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +81,24 @@ struct FrmSizeEnum {
     pixel_format: u32,
     type_: u32,
     size: FrmSizeUnion,
+    reserved: [u32; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct FrmIvalUnion {
+    data: [u32; 6],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct FrmIvalEnum {
+    index: u32,
+    pixel_format: u32,
+    width: u32,
+    height: u32,
+    type_: u32,
+    interval: FrmIvalUnion,
     reserved: [u32; 2],
 }
 
@@ -215,15 +243,46 @@ pub fn resolutions(path: &Path, fourcc: &str) -> Vec<Resolution> {
     let Ok(fd) = open_device(path) else {
         return Vec::new();
     };
-    let pixel_format = fourcc
+    resolutions_for(fd.0, pixel_format_value(fourcc))
+}
+
+pub fn modes(path: &Path, fourcc: &str) -> Vec<CaptureMode> {
+    let Ok(fd) = open_device(path) else {
+        return Vec::new();
+    };
+    let pixel_format = pixel_format_value(fourcc);
+    let mut result = Vec::new();
+    for resolution in resolutions_for(fd.0, pixel_format) {
+        let rates = frame_intervals(fd.0, pixel_format, resolution.width, resolution.height);
+        let rates = if rates.is_empty() {
+            vec![30.0]
+        } else {
+            rates
+        };
+        for fps in rates {
+            result.push(CaptureMode {
+                fourcc: fourcc.to_string(),
+                width: resolution.width,
+                height: resolution.height,
+                fps,
+            });
+        }
+    }
+    result
+}
+
+fn pixel_format_value(fourcc: &str) -> u32 {
+    fourcc
         .as_bytes()
         .iter()
         .copied()
         .enumerate()
         .fold(0u32, |acc, (index, byte)| {
             acc | (byte as u32) << (index * 8)
-        });
+        })
+}
 
+fn resolutions_for(fd: RawFd, pixel_format: u32) -> Vec<Resolution> {
     let mut result = Vec::new();
     for index in 0..64u32 {
         let mut size = FrmSizeEnum {
@@ -233,7 +292,7 @@ pub fn resolutions(path: &Path, fourcc: &str) -> Vec<Resolution> {
             size: FrmSizeUnion { data: [0; 6] },
             reserved: [0; 2],
         };
-        if ioctl(fd.0, VIDIOC_ENUM_FRAMESIZES, &mut size).is_err() {
+        if ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &mut size).is_err() {
             break;
         }
         let values = size.size.data;
@@ -263,9 +322,68 @@ pub fn resolutions(path: &Path, fourcc: &str) -> Vec<Resolution> {
         }
     }
     result.retain(|resolution| resolution.width > 0 && resolution.height > 0);
-    result.sort_by_key(|resolution| resolution.width * resolution.height);
+    result.sort_by(|left, right| {
+        (right.width * right.height).cmp(&(left.width * left.height))
+    });
     result.dedup();
     result
+}
+
+fn frame_intervals(fd: RawFd, pixel_format: u32, width: u32, height: u32) -> Vec<f64> {
+    const STANDARD_FPS: [f64; 9] = [60.0, 50.0, 30.0, 25.0, 24.0, 20.0, 15.0, 10.0, 5.0];
+
+    let mut rates = Vec::new();
+    for index in 0..64u32 {
+        let mut interval = FrmIvalEnum {
+            index,
+            pixel_format,
+            width,
+            height,
+            type_: 0,
+            interval: FrmIvalUnion { data: [0; 6] },
+            reserved: [0; 2],
+        };
+        if ioctl(fd, VIDIOC_ENUM_FRAMEINTERVALS, &mut interval).is_err() {
+            break;
+        }
+        let values = interval.interval.data;
+        match interval.type_ {
+            1 => {
+                let seconds = fraction_seconds(values[0], values[1]);
+                if seconds > 0.0 {
+                    rates.push(1.0 / seconds);
+                }
+            }
+            2 => {
+                let min_seconds = fraction_seconds(values[0], values[1]);
+                let max_seconds = fraction_seconds(values[2], values[3]);
+                if min_seconds > 0.0 && max_seconds > 0.0 {
+                    let highest = 1.0 / min_seconds;
+                    let lowest = 1.0 / max_seconds;
+                    rates.extend(
+                        STANDARD_FPS
+                            .iter()
+                            .copied()
+                            .filter(|fps| *fps <= highest * 1.01 && *fps >= lowest * 0.99),
+                    );
+                    rates.push(highest);
+                    rates.push(lowest);
+                }
+            }
+            _ => break,
+        }
+    }
+    rates.retain(|fps| fps.is_finite() && *fps >= 1.0 && *fps <= 1000.0);
+    rates.sort_by(|left, right| right.total_cmp(left));
+    rates.dedup_by(|left, right| (*left - *right).abs() < 0.01);
+    rates
+}
+
+fn fraction_seconds(numerator: u32, denominator: u32) -> f64 {
+    if numerator == 0 || denominator == 0 {
+        return 0.0;
+    }
+    f64::from(numerator) / f64::from(denominator)
 }
 
 #[cfg(test)]
@@ -284,5 +402,6 @@ mod tests {
         assert_eq!(std::mem::size_of::<Capability>(), 104);
         assert_eq!(std::mem::size_of::<FmtDesc>(), 64);
         assert_eq!(std::mem::size_of::<FrmSizeEnum>(), 44);
+        assert_eq!(std::mem::size_of::<FrmIvalEnum>(), 52);
     }
 }

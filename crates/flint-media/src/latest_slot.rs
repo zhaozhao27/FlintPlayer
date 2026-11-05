@@ -4,10 +4,19 @@ use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Clone, Debug)]
+pub struct Nv12Planes {
+    pub y: Vec<u8>,
+    pub uv: Vec<u8>,
+    pub y_stride: usize,
+    pub uv_stride: usize,
+}
+
+#[derive(Clone, Debug)]
 pub struct Frame {
     pub width: usize,
     pub height: usize,
     pub rgba: Vec<u8>,
+    pub nv12: Option<Nv12Planes>,
     pub pts: f64,
     pub captured_at: Instant,
     pub serial: u64,
@@ -16,6 +25,7 @@ pub struct Frame {
 pub struct LatestSlot {
     inner: Mutex<Option<Arc<Frame>>>,
     pool: Mutex<Vec<Vec<u8>>>,
+    nv12_pool: Mutex<Vec<Nv12Planes>>,
     serial: AtomicU64,
     dropped: AtomicU64,
 }
@@ -31,6 +41,7 @@ impl LatestSlot {
         Self {
             inner: Mutex::new(None),
             pool: Mutex::new(Vec::new()),
+            nv12_pool: Mutex::new(Vec::new()),
             serial: AtomicU64::new(0),
             dropped: AtomicU64::new(0),
         }
@@ -42,7 +53,16 @@ impl LatestSlot {
         let recycled = match slot.take() {
             Some(old) => {
                 self.dropped.fetch_add(1, Ordering::Relaxed);
-                Arc::try_unwrap(old).ok().map(|frame| frame.rgba)
+                match Arc::try_unwrap(old) {
+                    Ok(old) => match old.nv12 {
+                        Some(planes) => {
+                            self.recycle_planes(planes);
+                            None
+                        }
+                        None => Some(old.rgba),
+                    },
+                    Err(_) => None,
+                }
             }
             None => None,
         };
@@ -58,14 +78,29 @@ impl LatestSlot {
         let Ok(frame) = Arc::try_unwrap(frame) else {
             return;
         };
+        if let Some(planes) = frame.nv12 {
+            self.recycle_planes(planes);
+            return;
+        }
         let mut pool = self.pool.lock();
         if pool.len() < 3 && frame.rgba.capacity() > 0 {
             pool.push(frame.rgba);
         }
     }
 
+    fn recycle_planes(&self, planes: Nv12Planes) {
+        let mut pool = self.nv12_pool.lock();
+        if pool.len() < 3 {
+            pool.push(planes);
+        }
+    }
+
     pub fn acquire_buffer(&self) -> Option<Vec<u8>> {
         self.pool.lock().pop()
+    }
+
+    pub fn acquire_planes(&self) -> Option<Nv12Planes> {
+        self.nv12_pool.lock().pop()
     }
 
     pub fn clear(&self) {
@@ -96,6 +131,7 @@ mod tests {
             width,
             height,
             rgba: vec![0; width * height * 4],
+            nv12: None,
             pts: 0.0,
             captured_at: Instant::now(),
             serial: 0,
@@ -122,5 +158,26 @@ mod tests {
         slot.recycle(live);
         let buffer = slot.acquire_buffer().unwrap();
         assert_eq!(buffer.len(), 64);
+    }
+
+    #[test]
+    fn nv12_planes_are_recycled_separately() {
+        let slot = LatestSlot::new();
+        let mut planes = frame(4, 4);
+        planes.nv12 = Some(Nv12Planes {
+            y: vec![0; 16],
+            uv: vec![0; 8],
+            y_stride: 4,
+            uv_stride: 4,
+        });
+        planes.rgba = Vec::new();
+        assert!(slot.publish(planes).is_none());
+        assert!(slot.acquire_planes().is_none());
+
+        slot.publish(frame(4, 4));
+        let recycled = slot.acquire_planes().expect("replaced NV12 frame returns to pool");
+        assert_eq!(recycled.y.len(), 16);
+        assert_eq!(recycled.uv.len(), 8);
+        assert!(slot.acquire_buffer().is_none());
     }
 }

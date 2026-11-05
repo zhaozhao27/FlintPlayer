@@ -16,6 +16,7 @@ pub struct CaptureController {
     settings: CaptureSettings,
     texture: Option<DynamicTexture>,
     texture_size: Option<(u32, u32)>,
+    yuv_frame: Option<Arc<YuvFrame>>,
     frame_size: Option<(u32, u32)>,
     scratch: Vec<u8>,
     dirty: bool,
@@ -36,6 +37,7 @@ impl CaptureController {
             settings: CaptureSettings::default(),
             texture: None,
             texture_size: None,
+            yuv_frame: None,
             frame_size: None,
             scratch: Vec::new(),
             dirty: false,
@@ -97,6 +99,10 @@ impl CaptureController {
         self.texture_size
     }
 
+    pub fn yuv_frame(&self) -> Option<Arc<YuvFrame>> {
+        self.yuv_frame.clone()
+    }
+
     pub fn display_info(&self) -> String {
         let Some(info) = &self.info else {
             return crate::i18n::tr("未打开媒体");
@@ -140,6 +146,7 @@ impl CaptureController {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok((engine, info)) => {
+                        engine.shared().set_yuv_output(true);
                         this.shared = Some(engine.shared());
                         this.engine = Some(engine);
                         this.info = Some(info);
@@ -171,6 +178,7 @@ impl CaptureController {
         }
         self.shared = None;
         self.info = None;
+        self.yuv_frame = None;
         self.frame_size = None;
         self.dirty = false;
         self.error = None;
@@ -200,10 +208,31 @@ impl CaptureController {
         let Some(frame) = shared.slot.take() else {
             return;
         };
+        let Ok(frame) = Arc::try_unwrap(frame) else {
+            return;
+        };
         let (width, height) = (frame.width as u32, frame.height as u32);
-        if width == 0 || height == 0 || frame.rgba.len() < (width as usize * height as usize * 4) {
+        if width == 0 || height == 0 {
             return;
         }
+        self.pending_captured = Some(frame.captured_at);
+        if let Some(planes) = frame.nv12 {
+            self.frame_size = Some((width, height));
+            self.yuv_frame = Some(Arc::new(YuvFrame {
+                width,
+                height,
+                y_plane: Arc::new(planes.y),
+                y_stride: planes.y_stride as u32,
+                uv_plane: Arc::new(planes.uv),
+                uv_stride: planes.uv_stride as u32,
+                color_space: YuvColorSpace::Bt601Limited,
+            }));
+            return;
+        }
+        if frame.rgba.len() < (width as usize * height as usize * 4) {
+            return;
+        }
+        self.yuv_frame = None;
         self.scratch.resize(width as usize * height as usize * 4, 0);
         for (destination, source) in self
             .scratch
@@ -216,7 +245,6 @@ impl CaptureController {
             destination[3] = 255;
         }
         self.frame_size = Some((width, height));
-        self.pending_captured = Some(frame.captured_at);
         self.dirty = true;
     }
 
@@ -246,11 +274,11 @@ impl CaptureController {
     }
 
     pub fn upload_frame(&mut self, window: &mut Window) {
-        if !self.dirty {
-            return;
-        }
         if let Some(captured) = self.pending_captured.take() {
             self.latency_ms = captured.elapsed().as_secs_f32() * 1000.0;
+        }
+        if !self.dirty {
+            return;
         }
         let Some((width, height)) = self.frame_size else {
             return;

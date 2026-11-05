@@ -33,6 +33,7 @@ pub(super) struct CaptureData {
     pub nominal_fps: f64,
     pub bitrate_mbps: f64,
     pub decoded: String,
+    pub display_format: String,
     pub output_width: u32,
     pub output_height: u32,
     pub actual_fps: f64,
@@ -235,11 +236,15 @@ fn capture_rows(data: &CaptureData) -> Vec<OsdRow> {
         OsdRow::Field(
             "输出:",
             vec![
-                ("RGBA8888".to_string(), MAGENTA),
                 (
                     trf(
-                        " (32 位), {w}×{h}",
-                        &[&output_width.to_string(), &output_height.to_string()],
+                        "{format} ({bits} 位), {w}×{h}",
+                        &[
+                            &data.display_format,
+                            &display_bit_depth(&data.display_format).to_string(),
+                            &output_width.to_string(),
+                            &output_height.to_string(),
+                        ],
                     ),
                     MAGENTA,
                 ),
@@ -262,7 +267,10 @@ fn capture_rows(data: &CaptureData) -> Vec<OsdRow> {
             "- 像素格式:",
             vec![
                 (decoded, MAGENTA),
-                (" (Input)->RGBA (Display)".to_string(), RED),
+                (
+                    format!(" (Input)->{} (Display)", data.display_format),
+                    RED,
+                ),
             ],
         ),
         OsdRow::Field(
@@ -463,6 +471,13 @@ fn bit_depth(fourcc: &str) -> u32 {
         "YUYV" | "YUY2" | "UYVY" => 16,
         "GREY" => 8,
         _ => 24,
+    }
+}
+
+fn display_bit_depth(format: &str) -> u32 {
+    match format {
+        "NV12" => 12,
+        _ => 32,
     }
 }
 

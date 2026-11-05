@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use flint_core::device::{self, DeviceInfo, FormatInfo, Resolution};
+use flint_core::device::{self, CaptureMode, DeviceInfo};
 use flint_media::CaptureSettings;
 use gpui::*;
 
@@ -29,10 +29,8 @@ pub struct SettingsController {
     dropdown: Option<DropdownKind>,
     devices: Vec<DeviceInfo>,
     device_index: Option<usize>,
-    formats: Vec<FormatInfo>,
-    format_index: Option<usize>,
-    resolutions: Vec<Resolution>,
-    resolution_index: Option<usize>,
+    modes: Vec<CaptureMode>,
+    mode_index: Option<usize>,
     saved: HashMap<String, SavedSelection>,
     pending_selections: Option<Vec<(String, String, u32, u32)>>,
     request: Option<CaptureRequest>,
@@ -60,10 +58,8 @@ impl SettingsController {
             dropdown: None,
             devices: Vec::new(),
             device_index: None,
-            formats: Vec::new(),
-            format_index: None,
-            resolutions: Vec::new(),
-            resolution_index: None,
+            modes: Vec::new(),
+            mode_index: None,
             saved,
             pending_selections: None,
             request: None,
@@ -114,20 +110,12 @@ impl SettingsController {
         self.device_index
     }
 
-    pub fn formats(&self) -> &[FormatInfo] {
-        &self.formats
+    pub fn modes(&self) -> &[CaptureMode] {
+        &self.modes
     }
 
-    pub fn format_index(&self) -> Option<usize> {
-        self.format_index
-    }
-
-    pub fn resolutions(&self) -> &[Resolution] {
-        &self.resolutions
-    }
-
-    pub fn resolution_index(&self) -> Option<usize> {
-        self.resolution_index
+    pub fn mode_index(&self) -> Option<usize> {
+        self.mode_index
     }
 
     pub fn open(&mut self, tab: usize, cx: &mut Context<Self>) {
@@ -138,7 +126,7 @@ impl SettingsController {
         if self.device_index.map_or(true, |index| index >= self.devices.len()) {
             self.device_index = (!self.devices.is_empty()).then_some(0);
         }
-        self.refresh_formats();
+        self.refresh_modes();
         cx.notify();
     }
 
@@ -153,42 +141,23 @@ impl SettingsController {
         }
         self.device_index = Some(index);
         self.dropdown = None;
-        self.refresh_formats();
+        self.refresh_modes();
         cx.notify();
     }
 
-    pub fn select_format(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(format) = self.formats.get(index) else {
+    pub fn select_mode(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(mode) = self.modes.get(index).cloned() else {
             return;
         };
-        let key = self.device_key();
-        let fourcc = format.fourcc.clone();
-        let Some(key) = key else {
-            return;
-        };
-        let entry = self.saved.entry(key).or_default();
-        entry.fourcc = Some(fourcc);
-        let (width, height) = (entry.width, entry.height);
-        self.format_index = Some(index);
-        self.dropdown = None;
-        self.sync_selections();
-        self.refresh_resolutions(width, height);
-        cx.notify();
-    }
-
-    pub fn select_resolution(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(resolution) = self.resolutions.get(index) else {
-            return;
-        };
-        let width = resolution.width;
-        let height = resolution.height;
         let Some(key) = self.device_key() else {
             return;
         };
         let entry = self.saved.entry(key).or_default();
-        entry.width = Some(width);
-        entry.height = Some(height);
-        self.resolution_index = Some(index);
+        entry.fourcc = Some(mode.fourcc);
+        entry.width = Some(mode.width);
+        entry.height = Some(mode.height);
+        self.mode_index = Some(index);
+        self.dropdown = None;
         self.sync_selections();
         cx.notify();
     }
@@ -199,22 +168,18 @@ impl SettingsController {
         };
         let source = device.path.display().to_string();
         let name = device.name.clone();
-        let fourcc = self
-            .format_index
-            .and_then(|index| self.formats.get(index))
-            .map(|format| format.fourcc.clone());
-        let (width, height) = self
-            .resolution_index
-            .and_then(|index| self.resolutions.get(index))
-            .map(|resolution| (resolution.width, resolution.height))
-            .unwrap_or((1280, 720));
+        let mode = self.mode_index.and_then(|index| self.modes.get(index));
+        let fourcc = mode.map(|mode| mode.fourcc.clone());
+        let width = mode.map_or(1280, |mode| mode.width);
+        let height = mode.map_or(720, |mode| mode.height);
+        let fps = mode.map_or(30, |mode| mode.fps.round().max(1.0) as u32);
         self.request = Some(CaptureRequest {
             source,
             name,
             settings: CaptureSettings {
                 width,
                 height,
-                fps: 30,
+                fps,
                 fourcc,
                 input_format: None,
                 pixel_format: None,
@@ -252,82 +217,62 @@ impl SettingsController {
         self.pending_selections = Some(selections);
     }
 
-    fn refresh_formats(&mut self) {
-        self.formats.clear();
-        self.format_index = None;
-        self.resolutions.clear();
-        self.resolution_index = None;
-
-        let (key, formats) = match self.device_index.and_then(|index| self.devices.get(index)) {
-            Some(device) => (
-                device.path.display().to_string(),
-                device.formats.clone(),
-            ),
-            None => return,
-        };
-        let saved = self.saved.get(&key).cloned().unwrap_or_default();
-        self.formats = formats;
-        self.format_index = saved
-            .fourcc
-            .as_deref()
-            .and_then(|fourcc| {
-                self.formats
-                    .iter()
-                    .position(|format| format.fourcc == fourcc)
-            })
-            .or_else(|| preferred_format(&self.formats));
-        self.refresh_resolutions(saved.width, saved.height);
-    }
-
-    fn refresh_resolutions(&mut self, width: Option<u32>, height: Option<u32>) {
-        self.resolutions.clear();
-        self.resolution_index = None;
+    fn refresh_modes(&mut self) {
+        self.modes.clear();
+        self.mode_index = None;
 
         let Some(device) = self.device_index.and_then(|index| self.devices.get(index)) else {
             return;
         };
-        let Some(fourcc) = self
-            .format_index
-            .and_then(|index| self.formats.get(index))
-            .map(|format| format.fourcc.clone())
-        else {
-            return;
-        };
-        self.resolutions = device::resolutions(&device.path, &fourcc);
-        self.resolutions.reverse();
-        self.resolution_index = match (width, height) {
-            (Some(width), Some(height)) => self
-                .resolutions
-                .iter()
-                .position(|resolution| resolution.width == width && resolution.height == height),
-            _ => None,
+        let key = device.path.display().to_string();
+        for format in &device.formats {
+            self.modes
+                .extend(device::modes(&device.path, &format.fourcc));
         }
-        .or_else(|| preferred_resolution(&self.resolutions));
+        let saved = self.saved.get(&key).cloned().unwrap_or_default();
+        self.mode_index = saved
+            .fourcc
+            .as_deref()
+            .and_then(|fourcc| {
+                self.modes.iter().position(|mode| {
+                    mode.fourcc == fourcc
+                        && saved.width.map_or(true, |width| mode.width == width)
+                        && saved.height.map_or(true, |height| mode.height == height)
+                })
+            })
+            .or_else(|| preferred_mode(&self.modes));
     }
 }
 
-fn preferred_format(formats: &[FormatInfo]) -> Option<usize> {
+fn preferred_mode(modes: &[CaptureMode]) -> Option<usize> {
     const ORDER: [&str; 10] = [
         "MJPG", "JPEG", "H264", "HEVC", "YUYV", "NV12", "UYVY", "RGB3", "BGR3", "GREY",
     ];
-    ORDER
-        .iter()
-        .find_map(|wanted| formats.iter().position(|format| format.fourcc == *wanted))
-        .or(if formats.is_empty() { None } else { Some(0) })
-}
-
-fn preferred_resolution(resolutions: &[Resolution]) -> Option<usize> {
-    if let Some(index) = resolutions
-        .iter()
-        .position(|resolution| resolution.width == 1280 && resolution.height == 720)
-    {
-        return Some(index);
-    }
-    resolutions
+    modes
         .iter()
         .enumerate()
-        .filter(|(_, resolution)| resolution.width <= 1920 && resolution.height <= 1080)
-        .max_by_key(|(_, resolution)| resolution.width * resolution.height)
+        .min_by(|(_, left), (_, right)| {
+            let (left_format, left_size, left_fps) = mode_rank(left, &ORDER);
+            let (right_format, right_size, right_fps) = mode_rank(right, &ORDER);
+            left_format
+                .cmp(&right_format)
+                .then(left_size.cmp(&right_size))
+                .then(left_fps.total_cmp(&right_fps))
+        })
         .map(|(index, _)| index)
-        .or_else(|| resolutions.len().checked_sub(1))
+}
+
+fn mode_rank(mode: &CaptureMode, order: &[&str]) -> (u32, u32, f64) {
+    let format = order
+        .iter()
+        .position(|fourcc| *fourcc == mode.fourcc)
+        .unwrap_or(order.len()) as u32;
+    let size = if mode.width == 1280 && mode.height == 720 {
+        0
+    } else if mode.width <= 1920 && mode.height <= 1080 {
+        1_000_000_000 - mode.width * mode.height
+    } else {
+        2_000_000_000
+    };
+    (format, size, (mode.fps - 30.0).abs())
 }

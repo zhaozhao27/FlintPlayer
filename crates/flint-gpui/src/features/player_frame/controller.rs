@@ -3237,3 +3237,52 @@ fn parse_clock(text: &str) -> Option<f64> {
     }
     Some(total)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_shortcut;
+    use crate::menu;
+
+    #[test]
+    fn parses_modifiers_and_keys() {
+        assert_eq!(
+            parse_shortcut("Ctrl+F5"),
+            Some((true, false, false, "f5".to_string()))
+        );
+        assert_eq!(
+            parse_shortcut("Shift+Tab"),
+            Some((false, false, true, "tab".to_string()))
+        );
+        assert_eq!(
+            parse_shortcut("Ctrl+Shift+Alt+P"),
+            Some((true, true, true, "p".to_string()))
+        );
+        assert_eq!(
+            parse_shortcut("数字键+"),
+            Some((false, false, false, "add".to_string()))
+        );
+        assert_eq!(
+            parse_shortcut("数字键-"),
+            Some((false, false, false, "subtract".to_string()))
+        );
+        assert_eq!(parse_shortcut(""), None);
+        assert_eq!(parse_shortcut("Hyper+X"), None);
+    }
+
+    #[test]
+    fn menu_shortcuts_reach_phase_four_actions() {
+        let shortcuts = menu::collect_shortcuts(&menu::main_menu());
+        let action = |name: &str| {
+            shortcuts
+                .iter()
+                .find(|(shortcut, _)| shortcut == name)
+                .map(|(_, action)| action.as_str())
+        };
+        assert_eq!(action("Ctrl+F5"), Some("aspect-cycle"));
+        assert_eq!(action("Ctrl+F6"), Some("aspect-ratio-cycle"));
+        assert_eq!(action("Ctrl+F1"), Some("osd"));
+        assert_eq!(action("Alt+Enter"), Some("fullscreen"));
+        assert_eq!(action("Ctrl+P"), Some("flip-vertical"));
+        assert_eq!(action("Alt+K"), Some("rotate-cycle"));
+    }
+}
