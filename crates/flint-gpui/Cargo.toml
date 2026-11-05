@@ -40,5 +40,6 @@ assets = [
     ["target/release/flintplayer", "opt/flintplayer/bin/flintplayer", "755"],
     ["../../assets/flintplayer.desktop", "usr/share/applications/flintplayer.desktop", "644"],
     ["../../assets/icons/flintplayer.png", "usr/share/icons/hicolor/256x256/apps/flintplayer.png", "644"],
+    ["../../assets/icons/flintplayer.svg", "usr/share/icons/hicolor/scalable/apps/flintplayer.svg", "644"],
     { dest = "usr/bin/flintplayer", link_name = "/opt/flintplayer/bin/flintplayer" },
 ]

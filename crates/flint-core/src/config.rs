@@ -34,6 +34,7 @@ pub struct Config {
     pub vapoursynth_enabled: bool,
     pub vapoursynth_script: String,
     pub pano_enabled: bool,
+    pub pano_mode: String,
     pub pano_yaw: f32,
     pub pano_pitch: f32,
     pub pano_fov: f32,
@@ -42,6 +43,7 @@ pub struct Config {
     pub brightness: i16,
     pub contrast: i16,
     pub saturation: i16,
+    pub hue: i16,
     pub rotation: u16,
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
@@ -175,6 +177,7 @@ impl Default for Config {
             vapoursynth_enabled: false,
             vapoursynth_script: String::new(),
             pano_enabled: false,
+            pano_mode: "off".to_string(),
             pano_yaw: 0.0,
             pano_pitch: 0.0,
             pano_fov: 90.0,
@@ -183,16 +186,17 @@ impl Default for Config {
             brightness: 0,
             contrast: 0,
             saturation: 0,
+            hue: 0,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
             width: 1280,
             height: 720,
             fps: 30,
-            screen1_width: 1280,
-            screen1_height: 720,
-            screen2_width: 640,
-            screen2_height: 480,
+            screen1_width: 0,
+            screen1_height: 0,
+            screen2_width: 0,
+            screen2_height: 0,
             window_custom_width: 1280,
             window_custom_height: 720,
             osd_visible: false,
@@ -433,6 +437,10 @@ impl Config {
                     }
                 }
                 "pano_enabled" => cfg.pano_enabled = value == "true" || value == "1",
+                "pano_mode" => {
+                    cfg.pano_mode = value.to_string();
+                    cfg.pano_enabled = cfg.pano_mode != "off";
+                }
                 "pano_yaw" => {
                     cfg.pano_yaw = value.parse().unwrap_or(cfg.pano_yaw);
                     if !cfg.pano_yaw.is_finite() {
@@ -454,6 +462,7 @@ impl Config {
                 "saturation" => {
                     cfg.saturation = value.parse().unwrap_or(cfg.saturation).clamp(-100, 100)
                 }
+                "hue" => cfg.hue = value.parse().unwrap_or(cfg.hue).clamp(-100, 100),
                 "rotation" => {
                     if matches!(value, "0" | "90" | "180" | "270") {
                         cfg.rotation = value.parse().unwrap_or(0);
@@ -766,6 +775,7 @@ impl Config {
              vapoursynth_enabled={}\n\
              vapoursynth_script={}\n\
              pano_enabled={}\n\
+             pano_mode={}\n\
              pano_yaw={}\n\
              pano_pitch={}\n\
              pano_fov={}\n\
@@ -774,6 +784,7 @@ impl Config {
              brightness={}\n\
              contrast={}\n\
              saturation={}\n\
+             hue={}\n\
              rotation={}\n\
              flip_horizontal={}\n\
              flip_vertical={}\n\
@@ -923,6 +934,7 @@ impl Config {
             self.vapoursynth_enabled,
             sanitize(&self.vapoursynth_script),
             self.pano_enabled,
+            sanitize(&self.pano_mode),
             self.pano_yaw,
             self.pano_pitch,
             self.pano_fov,
@@ -931,6 +943,7 @@ impl Config {
             self.brightness,
             self.contrast,
             self.saturation,
+            self.hue,
             self.rotation,
             self.flip_horizontal,
             self.flip_vertical,

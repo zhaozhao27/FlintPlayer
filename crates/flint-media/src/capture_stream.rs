@@ -291,6 +291,11 @@ pub fn is_screen(source: &str) -> bool {
     screen_display(source).is_some()
 }
 
+fn window_spec(spec: &str) -> Option<u32> {
+    let value = spec.strip_prefix("window:")?;
+    u32::from_str_radix(value.trim_start_matches("0x"), 16).ok()
+}
+
 #[cfg(have_avdevice)]
 extern "C" {
     fn avdevice_register_all();
@@ -316,7 +321,12 @@ pub fn open(
     let fps = settings.fps;
     ffmpeg::init().map_err(|error| format!("FFmpeg 初始化失败：{error}"))?;
 
-    let screen = screen_display(source).map(str::to_string);
+    let screen_spec = screen_display(source).map(str::to_string);
+    let window_id = screen_spec.as_deref().and_then(window_spec);
+    let screen = screen_spec.as_ref().map(|spec| match window_spec(spec) {
+        Some(_) => std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string()),
+        None => spec.clone(),
+    });
     if screen.is_some() && !register_devices() {
         return Err("系统缺少 libavdevice，无法进行屏幕采集".to_string());
     }
@@ -334,7 +344,9 @@ pub fn open(
         options.set("max_delay", "500000");
         options.set("reorder_queue_size", "0");
     }
-    if width > 0 && height > 0 {
+    if let Some(window) = window_id {
+        options.set("window_id", &window.to_string());
+    } else if width > 0 && height > 0 {
         options.set("video_size", &format!("{width}x{height}"));
     } else if screen.is_some() {
         options.set("video_size", "1280x720");

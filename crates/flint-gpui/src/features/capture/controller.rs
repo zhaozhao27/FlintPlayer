@@ -2,8 +2,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use flint_media::snapshot::{save_snapshot, SnapshotSource};
 use flint_media::{
-    AudioRecordSummary, CaptureEngine, CaptureSettings, CaptureSmoothing, Shared, SourceInfo,
+    AudioRecordSummary, CaptureEngine, CaptureSettings, CaptureSmoothing, RecordSummary, Shared,
+    SourceInfo,
 };
 use gpui::*;
 
@@ -54,6 +56,10 @@ impl CaptureController {
 
     pub fn info(&self) -> Option<&SourceInfo> {
         self.info.as_ref()
+    }
+
+    pub fn source(&self) -> Option<&str> {
+        self.source.as_deref()
     }
 
     pub fn label(&self) -> String {
@@ -134,6 +140,7 @@ impl CaptureController {
         self.source = Some(source.clone());
         self.settings = settings.clone();
         self.error = None;
+        let yuv_output = settings.yuv_output;
         let task = cx.background_executor().spawn(async move {
             let mut engine = CaptureEngine::new();
             engine
@@ -146,7 +153,7 @@ impl CaptureController {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok((engine, info)) => {
-                        engine.shared().set_yuv_output(true);
+                        engine.shared().set_yuv_output(yuv_output);
                         this.shared = Some(engine.shared());
                         this.engine = Some(engine);
                         this.info = Some(info);
@@ -250,6 +257,48 @@ impl CaptureController {
 
     pub fn latency_ms(&self) -> f32 {
         self.latency_ms
+    }
+
+    pub fn take_snapshot(&self, path: &Path) -> Result<(), String> {
+        let Some((width, height)) = self.frame_size else {
+            return Err("当前没有可截取的画面".to_string());
+        };
+        if let Some(frame) = self.yuv_frame.as_ref() {
+            return save_snapshot(
+                path,
+                frame.width,
+                frame.height,
+                SnapshotSource::Nv12 {
+                    y: &frame.y_plane,
+                    y_stride: frame.y_stride as usize,
+                    uv: &frame.uv_plane,
+                    uv_stride: frame.uv_stride as usize,
+                },
+            );
+        }
+        if self.scratch.len() < width as usize * height as usize * 4 {
+            return Err("当前没有可截取的画面".to_string());
+        }
+        save_snapshot(path, width, height, SnapshotSource::Rgba(&self.scratch))
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.engine
+            .as_ref()
+            .map(|engine| engine.is_recording())
+            .unwrap_or(false)
+    }
+
+    pub fn start_recording(&self, path: &Path) -> Result<(), String> {
+        self.engine
+            .as_ref()
+            .ok_or_else(|| "当前没有可录制的画面".to_string())?
+            .start_recording(path)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn stop_recording(&self) -> Option<Result<RecordSummary, String>> {
+        self.engine.as_ref().and_then(|engine| engine.stop_recording())
     }
 
     pub fn is_audio_recording(&self) -> bool {

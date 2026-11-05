@@ -43,8 +43,26 @@ pub fn settings_overlay(
     settings: &Entity<SettingsController>,
     cx: &mut Context<PlayerFrameController>,
 ) -> AnyElement {
-    let (device_names, device_index, format_names, format_index, tab, dropdown) = {
+    let (
+        device_names,
+        device_index,
+        format_names,
+        format_index,
+        screen_names,
+        screen_label,
+        tab,
+        dropdown,
+    ) = {
         let controller = settings.read(cx);
+        let screen_names = controller
+            .screen_sources()
+            .iter()
+            .map(|source| match source.window {
+                Some(_) => format!("窗口：{} ({}×{})", source.title, source.width, source.height),
+                None => "X11 屏幕采集 (XShm)".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let screen_label = controller.screen_label();
         let device_names = controller
             .devices()
             .iter()
@@ -68,6 +86,8 @@ pub fn settings_overlay(
             controller.device_index(),
             format_names,
             controller.mode_index(),
+            screen_names,
+            screen_label,
             controller.tab(),
             controller.dropdown(),
         )
@@ -75,6 +95,17 @@ pub fn settings_overlay(
     let (capture_width, capture_height, capture_fps) = {
         let controller = settings.read(cx);
         controller.capture_size()
+    };
+    let (output_label, time_positioning, audio_monitor, manual_device, split_enabled, split_available) = {
+        let controller = settings.read(cx);
+        (
+            controller.output_label(),
+            controller.time_positioning(),
+            controller.audio_monitor(),
+            controller.manual_device().map(str::to_string),
+            controller.split_enabled(),
+            controller.split_available(),
+        )
     };
 
     let backdrop = div()
@@ -189,9 +220,14 @@ pub fn settings_overlay(
             .bg(rgb(TAB_BG)),
     );
 
-    let device_label = device_index
-        .and_then(|index| device_names.get(index).cloned())
+    let device_label = manual_device
+        .clone()
+        .or_else(|| {
+            device_index
+                .and_then(|index| device_names.get(index).cloned())
+        })
         .unwrap_or_else(|| tr("UVC 摄像头 (V4L2)"));
+    let device_placeholder = device_index.is_none() && manual_device.is_none();
     let format_label = format_index
         .and_then(|index| format_names.get(index).cloned())
         .unwrap_or_else(|| tr("自动选择(推荐)"));
@@ -199,15 +235,28 @@ pub fn settings_overlay(
     let content_children = match tab {
         1 => camera_tab(
             settings,
+            cx,
             &device_label,
-            device_index.is_none(),
+            device_placeholder,
             &format_label,
             format_index.is_none(),
+            &output_label,
+            time_positioning,
+            audio_monitor,
+            split_enabled,
+            split_available,
         ),
         2 => atv_tab(),
         3 => hdtv_tab(),
         4 => disc_tab(),
-        _ => capture_tab(cx, capture_width, capture_height, capture_fps),
+        _ => capture_tab(
+            settings,
+            cx,
+            &screen_label,
+            capture_width,
+            capture_height,
+            capture_fps,
+        ),
     };
 
     let content = div()
@@ -242,14 +291,29 @@ pub fn settings_overlay(
         96.0,
         "打开设备(O)",
     )
-    .on_click({
-        let settings = settings.clone();
-        move |_, _, cx: &mut App| {
-            settings.update(cx, |settings, cx| settings.open_selected(cx));
+    .on_click(cx.listener(|this, _, _, cx| match this.settings.read(cx).tab() {
+        0 => {
+            this.settings.update(cx, |settings, cx| settings.close(cx));
+            this.handle_action("capture-slot1".to_string(), cx);
         }
-    });
+        1 => this
+            .settings
+            .update(cx, |settings, cx| settings.open_selected(cx)),
+        _ => this.show_notice(crate::i18n::tr("该设备类型尚不支持"), cx),
+    }));
 
     let popup = match dropdown {
+        Some(DropdownKind::Screen) if tab == 0 && !screen_names.is_empty() => Some(
+            dropdown_popup(
+                108.0,
+                114.0,
+                360.0,
+                &screen_names,
+                settings,
+                DropdownKind::Screen,
+            )
+            .into_any_element(),
+        ),
         Some(DropdownKind::Device) if tab == 1 && !device_names.is_empty() => Some(
             dropdown_popup(
                 108.0,
@@ -272,6 +336,14 @@ pub fn settings_overlay(
             )
             .into_any_element(),
         ),
+        Some(DropdownKind::Output) if tab == 1 => {
+            let names = settings.read(cx).output_names();
+            Some(
+                dropdown_popup(108.0, 142.0, 160.0, &names, settings, DropdownKind::Output)
+                    .into_any_element(),
+            )
+        }
+        Some(DropdownKind::Smoothing) if tab == 0 => Some(smoothing_popup(settings, cx)),
         _ => None,
     };
 
@@ -311,11 +383,23 @@ pub fn settings_overlay(
 }
 
 fn capture_tab(
+    settings: &Entity<SettingsController>,
     cx: &mut Context<PlayerFrameController>,
+    screen_label: &str,
     width: u32,
     height: u32,
     fps: u32,
 ) -> Vec<AnyElement> {
+    let device_dropdown = dropdown_box(100.0, 30.0, 360.0, screen_label, false, true)
+        .id("settings-screen-dropdown")
+        .on_click({
+            let settings = settings.clone();
+            move |_, _, cx: &mut App| {
+                settings.update(cx, |settings, cx| {
+                    settings.toggle_dropdown(DropdownKind::Screen, cx)
+                });
+            }
+        });
     let slot1 = dlg_button("settings-capture-slot1", 100.0, 86.0, 120.0, "显示 1# 截屏器")
         .on_click(cx.listener(|this, _, _, cx| {
             this.settings.update(cx, |settings, cx| settings.close(cx));
@@ -355,23 +439,21 @@ fn capture_tab(
         140.0,
         "屏幕采集设置...",
     )
-    .on_click(cx.listener(|this, _, _, cx| {
-        this.handle_action("capture-smoothing".to_string(), cx);
-    }));
+    .on_click({
+        let settings = settings.clone();
+        move |_, _, cx: &mut App| {
+            settings.update(cx, |settings, cx| {
+                settings.toggle_dropdown(DropdownKind::Smoothing, cx)
+            });
+        }
+    });
 
     let mut capture_group = group(8.0, 8.0, 644.0, 150.0, "截屏器设置");
     capture_group = capture_group
         .child(field_label(14.0, 30.0, 82.0, "设备："))
-        .child(combo(
-            100.0,
-            30.0,
-            360.0,
-            &tr("X11 屏幕采集 (XShm)"),
-            "",
-            true,
-        ))
+        .child(device_dropdown)
         .child(field_label(14.0, 58.0, 82.0, "分辨率,FPS："))
-        .child(spin(100.0, 58.0, 66.0, width))
+        .child(capture_spin(cx, "settings-capture-width", 100.0, width))
         .child(text_box(
             170.0,
             58.0,
@@ -382,7 +464,7 @@ fn capture_tab(
             true,
             "×",
         ))
-        .child(spin(186.0, 58.0, 66.0, height))
+        .child(capture_spin(cx, "settings-capture-height", 186.0, height))
         .child(combo(
             264.0,
             58.0,
@@ -421,10 +503,16 @@ fn capture_tab(
 
 fn camera_tab(
     settings: &Entity<SettingsController>,
+    cx: &mut Context<PlayerFrameController>,
     device_label: &str,
     device_placeholder: bool,
     format_label: &str,
     format_placeholder: bool,
+    output_label: &str,
+    time_positioning: bool,
+    audio_monitor: bool,
+    split_enabled: bool,
+    split_available: bool,
 ) -> Vec<AnyElement> {
     let device_dropdown = dropdown_box(
         100.0,
@@ -460,21 +548,28 @@ fn camera_tab(
             });
         }
     });
+    let output_dropdown = dropdown_box(100.0, 58.0, 160.0, output_label, false, true)
+        .id("settings-output-dropdown")
+        .on_click({
+            let settings = settings.clone();
+            move |_, _, cx: &mut App| {
+                settings.update(cx, |settings, cx| {
+                    settings.toggle_dropdown(DropdownKind::Output, cx)
+                });
+            }
+        });
 
     let audio_device = tr("PulseAudio - 默认设备");
     let mut video_group = group(8.0, 8.0, 644.0, 150.0, "视频录制设备");
     video_group = video_group
         .child(field_label(14.0, 30.0, 82.0, "设备："))
         .child(device_dropdown)
-        .child(dlg_button(
-            "settings-camera-browse",
-            448.0,
-            30.0,
-            20.0,
-            "...",
-        ))
+        .child(
+            dlg_button("settings-camera-browse", 448.0, 30.0, 20.0, "...")
+                .on_click(cx.listener(|this, _, _, cx| this.choose_camera_device(cx))),
+        )
         .child(field_label(14.0, 58.0, 82.0, "输出："))
-        .child(combo(100.0, 58.0, 160.0, &tr("默认输出"), "", true))
+        .child(output_dropdown)
         .child(field_label(276.0, 58.0, 48.0, "格式："))
         .child(format_dropdown)
         .child(field_label(14.0, 86.0, 82.0, "音频："))
@@ -485,7 +580,11 @@ fn camera_tab(
             86.0,
             140.0,
             "检索更新",
-        ));
+        )
+        .on_click(cx.listener(|this, _, _, cx| {
+            let tab = this.settings.read(cx).tab();
+            this.settings.update(cx, |settings, cx| settings.open(tab, cx));
+        })));
 
     let mut audio_group = group(8.0, 166.0, 644.0, 126.0, "音频录制设备");
     audio_group = audio_group
@@ -493,29 +592,66 @@ fn camera_tab(
         .child(combo(100.0, 30.0, 360.0, &audio_device, "", true))
         .child(field_label(14.0, 56.0, 82.0, "输入："))
         .child(combo(100.0, 56.0, 360.0, "", "", false))
-        .child(check(
-            100.0,
-            88.0,
-            400.0,
-            "连接在我的电脑上能够听到的声音",
-            true,
-            true,
-        ));
+        .child(
+            check(
+                100.0,
+                88.0,
+                400.0,
+                "连接在我的电脑上能够听到的声音",
+                audio_monitor,
+                true,
+            )
+            .id("settings-audio-monitor")
+            .on_click({
+                let settings = settings.clone();
+                move |_, _, cx: &mut App| {
+                    settings.update(cx, |settings, cx| settings.toggle_audio_monitor(cx));
+                }
+            }),
+        );
 
     let mut advanced_group = group(8.0, 300.0, 644.0, 58.0, "高级设置");
-    advanced_group = advanced_group.child(check(
-        14.0,
-        30.0,
-        300.0,
-        "使用时间定位功能",
-        false,
-        true,
-    ));
+    advanced_group = advanced_group.child(
+        check(
+            14.0,
+            30.0,
+            300.0,
+            "使用时间定位功能",
+            time_positioning,
+            true,
+        )
+        .id("settings-time-positioning")
+        .on_click({
+            let settings = settings.clone();
+            move |_, _, cx: &mut App| {
+                settings.update(cx, |settings, cx| settings.toggle_time_positioning(cx));
+            }
+        }),
+    );
+
+    let split_group = group(8.0, 364.0, 644.0, 56.0, "多设备").child(
+        check(
+            14.0,
+            30.0,
+            420.0,
+            "多设备同步采集（分屏显示）",
+            split_enabled && split_available,
+            split_available,
+        )
+        .id("settings-split")
+        .on_click({
+            let settings = settings.clone();
+            move |_, _, cx: &mut App| {
+                settings.update(cx, |settings, cx| settings.toggle_split(cx));
+            }
+        }),
+    );
 
     vec![
         video_group.into_any_element(),
         audio_group.into_any_element(),
         advanced_group.into_any_element(),
+        split_group.into_any_element(),
     ]
 }
 
@@ -708,6 +844,9 @@ fn dropdown_popup(
                         settings.update(cx, |settings, cx| match kind {
                             DropdownKind::Device => settings.select_device(index, cx),
                             DropdownKind::Format => settings.select_mode(index, cx),
+                            DropdownKind::Screen => settings.select_screen(index, cx),
+                            DropdownKind::Output => settings.select_output(index, cx),
+                            DropdownKind::Smoothing => {}
                         });
                     }
                 })
@@ -722,6 +861,63 @@ fn dropdown_popup(
         .h(px(full_height.min(360.0)))
         .id("settings-dropdown-popup")
         .overflow_y_scroll()
+        .bg(rgb(CONTROL_BG))
+        .border_1()
+        .border_color(rgb(BUTTON_BORDER))
+        .child(inner)
+        .into_any_element()
+}
+
+fn smoothing_popup(
+    settings: &Entity<SettingsController>,
+    cx: &mut Context<PlayerFrameController>,
+) -> AnyElement {
+    const WIDTH: f32 = 300.0;
+    let (names, current) = {
+        let controller = settings.read(cx);
+        (controller.smoothing_names(), controller.smoothing_index())
+    };
+    let full_height = names.len() as f32 * 20.0 + 2.0;
+    let mut inner = div().relative().w_full().h(px(full_height));
+    for (index, name) in names.iter().enumerate() {
+        let selected = index == current;
+        inner = inner.child(
+            div()
+                .id(("settings-smoothing-option", index))
+                .absolute()
+                .left(px(1.0))
+                .top(px(index as f32 * 20.0 + 1.0))
+                .w(px(WIDTH - 2.0))
+                .h(px(20.0))
+                .flex()
+                .items_center()
+                .px(px(6.0))
+                .truncate()
+                .text_size(px(11.0))
+                .text_color(rgb(CONTROL_TEXT))
+                .bg(rgb(if selected { 0xdce9f7 } else { CONTROL_BG }))
+                .hover(|style| {
+                    style
+                        .bg(rgb(OPTION_HOVER))
+                        .text_color(rgb(0xffffff))
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let key = this.settings.update(cx, |settings, cx| {
+                        settings.select_smoothing(index, cx)
+                    });
+                    if let Some(key) = key {
+                        this.apply_capture_smoothing(key, cx);
+                    }
+                }))
+                .child(name.clone()),
+        );
+    }
+    div()
+        .absolute()
+        .left(px(356.0))
+        .top(px(199.0))
+        .w(px(WIDTH))
+        .id("settings-smoothing-popup")
         .bg(rgb(CONTROL_BG))
         .border_1()
         .border_color(rgb(BUTTON_BORDER))
@@ -926,7 +1122,26 @@ fn dropdown_box(
         )
 }
 
-fn spin(left: f32, top: f32, width: f32, value: u32) -> Div {
+fn capture_spin(
+    cx: &mut Context<PlayerFrameController>,
+    id: &'static str,
+    left: f32,
+    value: u32,
+) -> Stateful<Div> {
+    let label = if value > 0 {
+        value.to_string()
+    } else {
+        tr("全屏")
+    };
+    spin(left, 58.0, 66.0, label)
+        .id(id)
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.settings.update(cx, |settings, cx| settings.close(cx));
+            this.handle_action("capture-size1".to_string(), cx);
+        }))
+}
+
+fn spin(left: f32, top: f32, width: f32, value: impl std::fmt::Display) -> Div {
     let half = 22.0 / 2.0;
     div()
         .absolute()
@@ -949,6 +1164,7 @@ fn spin(left: f32, top: f32, width: f32, value: u32) -> Div {
                 .text_size(px(11.0))
                 .text_color(rgb(CONTROL_TEXT))
                 .child(value.to_string()),
+
         )
         .child(spin_arrow(width, 1.0, half - 1.0, "▴"))
         .child(spin_arrow(width, half, half - 1.0, "▾"))

@@ -1,8 +1,116 @@
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
-    AtomEnum, ClientMessageData, ClientMessageEvent, ConnectionExt, EventMask, PropMode,
+    AtomEnum, ClientMessageData, ClientMessageEvent, ConnectionExt, EventMask, MapState, PropMode,
 };
 use x11rb::rust_connection::RustConnection;
+
+pub struct WindowInfo {
+    pub id: u32,
+    pub title: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn visible_windows() -> Vec<WindowInfo> {
+    let Ok((connection, screen_number)) = x11rb::connect(None) else {
+        return Vec::new();
+    };
+    let Some(screen) = connection.setup().roots.get(screen_number) else {
+        return Vec::new();
+    };
+    let root = screen.root;
+    let Some(tree) = connection
+        .query_tree(root)
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+    else {
+        return Vec::new();
+    };
+    let Some(net_name_atom) = connection
+        .intern_atom(false, b"_NET_WM_NAME")
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| reply.atom)
+    else {
+        return Vec::new();
+    };
+    let Some(utf8_atom) = connection
+        .intern_atom(false, b"UTF8_STRING")
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| reply.atom)
+    else {
+        return Vec::new();
+    };
+    let Some(pid_atom) = connection
+        .intern_atom(false, b"_NET_WM_PID")
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| reply.atom)
+    else {
+        return Vec::new();
+    };
+    let own_pid = std::process::id();
+    let mut windows = Vec::new();
+    for &window in &tree.children {
+        if windows.len() >= 64 {
+            break;
+        }
+        let Some(attributes) = connection
+            .get_window_attributes(window)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+        else {
+            continue;
+        };
+        if attributes.map_state != MapState::VIEWABLE || attributes.override_redirect {
+            continue;
+        }
+        let Some(geometry) = connection
+            .get_geometry(window)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+        else {
+            continue;
+        };
+        if geometry.width < 16 || geometry.height < 16 {
+            continue;
+        }
+        let pid = connection
+            .get_property(false, window, pid_atom, AtomEnum::CARDINAL, 0, 1)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .and_then(|reply| reply.value32().and_then(|mut values| values.next()));
+        if pid == Some(own_pid) {
+            continue;
+        }
+        let title = connection
+            .get_property(false, window, net_name_atom, utf8_atom, 0, 256)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .filter(|reply| !reply.value.is_empty())
+            .map(|reply| String::from_utf8_lossy(&reply.value).trim().to_string())
+            .filter(|title| !title.is_empty())
+            .or_else(|| {
+                connection
+                    .get_property(false, window, AtomEnum::WM_NAME, AtomEnum::STRING, 0, 256)
+                    .ok()
+                    .and_then(|cookie| cookie.reply().ok())
+                    .map(|reply| String::from_utf8_lossy(&reply.value).trim().to_string())
+                    .filter(|title| !title.is_empty())
+            });
+        let Some(title) = title else {
+            continue;
+        };
+        windows.push(WindowInfo {
+            id: window,
+            title,
+            width: u32::from(geometry.width),
+            height: u32::from(geometry.height),
+        });
+    }
+    windows
+}
 
 pub struct OwnWindow {
     connection: RustConnection,

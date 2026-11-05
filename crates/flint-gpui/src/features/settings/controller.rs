@@ -8,12 +8,60 @@ pub struct CaptureRequest {
     pub source: String,
     pub name: String,
     pub settings: CaptureSettings,
+    pub split: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DropdownKind {
     Device,
     Format,
+    Screen,
+    Output,
+    Smoothing,
+}
+
+pub const SMOOTHING_OPTIONS: [(&str, &str); 6] = [
+    ("none", "不使用平滑滤镜"),
+    ("system", "使用系统默认平滑滤镜(慢)"),
+    ("low", "使用 FlintPlayer 低品质平滑滤镜"),
+    ("normal", "使用 FlintPlayer 普通品质平滑滤镜"),
+    ("medium", "使用 FlintPlayer 适中品质平滑滤镜"),
+    ("high", "使用 FlintPlayer 高品质平滑滤镜"),
+];
+
+pub const OUTPUT_OPTIONS: [(&str, &str); 2] = [
+    ("default", "默认输出"),
+    ("rgba", "软件 RGBA 输出"),
+];
+
+#[derive(Clone)]
+pub struct ScreenSource {
+    pub display: String,
+    pub window: Option<u32>,
+    pub title: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+fn screen_sources() -> Vec<ScreenSource> {
+    let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+    let mut sources = vec![ScreenSource {
+        display: display.clone(),
+        window: None,
+        title: String::new(),
+        width: 0,
+        height: 0,
+    }];
+    for window in crate::x11::visible_windows() {
+        sources.push(ScreenSource {
+            display: display.clone(),
+            window: Some(window.id),
+            title: window.title,
+            width: window.width,
+            height: window.height,
+        });
+    }
+    sources
 }
 
 #[derive(Clone, Default)]
@@ -35,6 +83,15 @@ pub struct SettingsController {
     pending_selections: Option<Vec<(String, String, u32, u32)>>,
     request: Option<CaptureRequest>,
     capture_size: (u32, u32, u32),
+    screen_sources: Vec<ScreenSource>,
+    screen_index: usize,
+    output_index: usize,
+    smoothing_key: String,
+    time_positioning: bool,
+    audio_monitor: bool,
+    manual_device: Option<String>,
+    split_enabled: bool,
+    active_source: Option<String>,
 }
 
 impl SettingsController {
@@ -64,6 +121,15 @@ impl SettingsController {
             pending_selections: None,
             request: None,
             capture_size: (1280, 720, 30),
+            screen_sources: Vec::new(),
+            screen_index: 0,
+            output_index: 0,
+            smoothing_key: "system".to_string(),
+            time_positioning: false,
+            audio_monitor: true,
+            manual_device: None,
+            split_enabled: false,
+            active_source: None,
         }
     }
 
@@ -102,6 +168,157 @@ impl SettingsController {
         cx.notify();
     }
 
+    pub fn screen_sources(&self) -> &[ScreenSource] {
+        &self.screen_sources
+    }
+
+    pub fn screen_label(&self) -> String {
+        let Some(source) = self.screen_sources.get(self.screen_index) else {
+            return String::new();
+        };
+        match source.window {
+            Some(_) => format!("窗口：{} ({}×{})", source.title, source.width, source.height),
+            None => "X11 屏幕采集 (XShm)".to_string(),
+        }
+    }
+
+    pub fn screen_source(&self, slot: u32) -> Option<String> {
+        let source = self.screen_sources.get(self.screen_index)?;
+        Some(match source.window {
+            Some(window) => format!("screen{slot}:window:0x{window:x}"),
+            None => format!("screen{slot}:{}", source.display),
+        })
+    }
+
+    pub fn select_screen(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index >= self.screen_sources.len() {
+            return;
+        }
+        self.screen_index = index;
+        self.apply_screen_size();
+        self.dropdown = None;
+        cx.notify();
+    }
+
+    fn apply_screen_size(&mut self) {
+        let Some(source) = self.screen_sources.get(self.screen_index) else {
+            return;
+        };
+        if source.window.is_some() && source.width > 0 && source.height > 0 {
+            self.capture_size.0 = source.width;
+            self.capture_size.1 = source.height;
+        }
+    }
+
+    pub fn output_label(&self) -> String {
+        crate::i18n::tr(OUTPUT_OPTIONS[self.output_index.min(OUTPUT_OPTIONS.len() - 1)].1)
+    }
+
+    pub fn output_names(&self) -> Vec<String> {
+        OUTPUT_OPTIONS
+            .iter()
+            .map(|(_, label)| crate::i18n::tr(label))
+            .collect()
+    }
+
+    pub fn select_output(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.output_index = index.min(OUTPUT_OPTIONS.len() - 1);
+        self.dropdown = None;
+        cx.notify();
+    }
+
+    pub fn smoothing_key(&self) -> &str {
+        &self.smoothing_key
+    }
+
+    pub fn set_smoothing_key(&mut self, key: String) {
+        self.smoothing_key = key;
+    }
+
+    pub fn smoothing_names(&self) -> Vec<String> {
+        SMOOTHING_OPTIONS
+            .iter()
+            .map(|(_, label)| crate::i18n::tr(label))
+            .collect()
+    }
+
+    pub fn smoothing_index(&self) -> usize {
+        SMOOTHING_OPTIONS
+            .iter()
+            .position(|(key, _)| *key == self.smoothing_key)
+            .unwrap_or(1)
+    }
+
+    pub fn select_smoothing(&mut self, index: usize, cx: &mut Context<Self>) -> Option<String> {
+        let key = SMOOTHING_OPTIONS.get(index)?.0.to_string();
+        self.smoothing_key = key.clone();
+        self.dropdown = None;
+        cx.notify();
+        Some(key)
+    }
+
+    pub fn time_positioning(&self) -> bool {
+        self.time_positioning
+    }
+
+    pub fn toggle_time_positioning(&mut self, cx: &mut Context<Self>) {
+        self.time_positioning = !self.time_positioning;
+        cx.notify();
+    }
+
+    pub fn audio_monitor(&self) -> bool {
+        self.audio_monitor
+    }
+
+    pub fn toggle_audio_monitor(&mut self, cx: &mut Context<Self>) {
+        self.audio_monitor = !self.audio_monitor;
+        cx.notify();
+    }
+
+    pub fn manual_device(&self) -> Option<&str> {
+        self.manual_device.as_deref()
+    }
+
+    pub fn select_manual_device(&mut self, path: String, cx: &mut Context<Self>) {
+        self.manual_device = Some(path);
+        self.device_index = None;
+        self.modes.clear();
+        self.mode_index = None;
+        self.dropdown = None;
+        cx.notify();
+    }
+
+    pub fn set_active_source(&mut self, source: Option<String>) {
+        self.active_source = source;
+    }
+
+    pub fn split_enabled(&self) -> bool {
+        self.split_enabled
+    }
+
+    pub fn split_available(&self) -> bool {
+        let Some(active) = self.active_source.as_deref() else {
+            return false;
+        };
+        self.selected_source().is_some_and(|source| source != active)
+    }
+
+    pub fn toggle_split(&mut self, cx: &mut Context<Self>) {
+        if !self.split_available() {
+            return;
+        }
+        self.split_enabled = !self.split_enabled;
+        cx.notify();
+    }
+
+    fn split_requested(&self) -> bool {
+        self.split_enabled && self.split_available()
+    }
+
+    fn selected_source(&self) -> Option<String> {
+        self.manual_device.clone().or_else(|| self.device_key())
+    }
+
     pub fn devices(&self) -> &[DeviceInfo] {
         &self.devices
     }
@@ -120,6 +337,9 @@ impl SettingsController {
 
     pub fn open(&mut self, tab: usize, cx: &mut Context<Self>) {
         self.tab = tab.min(4);
+        self.screen_sources = screen_sources();
+        self.screen_index = self.screen_index.min(self.screen_sources.len().saturating_sub(1));
+        self.apply_screen_size();
         self.devices = device::scan_devices();
         self.open = true;
         self.dropdown = None;
@@ -140,6 +360,7 @@ impl SettingsController {
             return;
         }
         self.device_index = Some(index);
+        self.manual_device = None;
         self.dropdown = None;
         self.refresh_modes();
         cx.notify();
@@ -163,6 +384,26 @@ impl SettingsController {
     }
 
     pub fn open_selected(&mut self, cx: &mut Context<Self>) {
+        if let Some(path) = self.manual_device.clone() {
+            self.request = Some(CaptureRequest {
+                source: path.clone(),
+                name: path,
+                settings: CaptureSettings {
+                    width: 1280,
+                    height: 720,
+                    fps: 30,
+                    fourcc: None,
+                    input_format: None,
+                    pixel_format: None,
+                    smoothing: Default::default(),
+                    yuv_output: self.output_index == 0,
+                },
+                split: self.split_requested(),
+            });
+            self.open = false;
+            cx.notify();
+            return;
+        }
         let Some(device) = self.device_index.and_then(|index| self.devices.get(index)) else {
             return;
         };
@@ -184,7 +425,9 @@ impl SettingsController {
                 input_format: None,
                 pixel_format: None,
                 smoothing: Default::default(),
+                yuv_output: self.output_index == 0,
             },
+            split: self.split_requested(),
         });
         self.open = false;
         cx.notify();

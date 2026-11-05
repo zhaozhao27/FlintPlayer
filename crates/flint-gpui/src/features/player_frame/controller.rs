@@ -10,17 +10,67 @@ use gpui::*;
 use crate::features::capture::CaptureController;
 use crate::features::playback::{PlaybackController, RawInput};
 use crate::features::playlist::PlaylistController;
-use crate::features::settings::SettingsController;
+use crate::features::settings::{SettingsController, SMOOTHING_OPTIONS};
 use crate::menu::{self, apply_dynamic, MenuData, MenuEntry};
 
 actions!(flint_player, [ToggleOsd, ToggleOsdBrief]);
 
 pub const PLAYER_KEY_CONTEXT: &str = "FlintPlayer";
 
+const EQ_FREQUENCIES: [u32; 10] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+const EQ_PRESETS: [(&str, [i16; 10]); 5] = [
+    ("平坦", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ("流行", [-1, 2, 4, 5, 3, 0, -1, -1, 1, 2]),
+    ("摇滚", [5, 4, 2, -1, -2, 0, 2, 3, 4, 5]),
+    ("古典", [4, 3, 2, 1, -1, -1, 0, 2, 3, 4]),
+    ("低音增强", [7, 5, 3, 1, 0, 0, 0, 0, 0, 0]),
+];
+
+fn panorama_menu(mode: &str) -> Vec<MenuEntry> {
+    vec![
+        MenuEntry::action("播放 360° 视频", "pano-on").checked(mode == "on"),
+        MenuEntry::action("不播放 360° 视频", "pano-off").checked(mode == "off"),
+        MenuEntry::action("总是播放 360° 视频", "pano-always").checked(mode == "always"),
+        MenuEntry::action("自动判断是否播放 360° 视频", "pano-auto").checked(mode == "auto"),
+        MenuEntry::separator(),
+        MenuEntry::action("复位 360° 视角", "pano-reset"),
+    ]
+}
+
+fn stereo_menu(mode: StereoMode) -> Vec<MenuEntry> {
+    let key = mode.key();
+    let output = vec![
+        MenuEntry::action("不使用 3D 视频输出", "stereo-off").checked(key == "off"),
+        MenuEntry::action("仅输出 左或上 视频（左右并排）", "stereo-left-sbs")
+            .checked(key == "left-sbs"),
+        MenuEntry::action("仅输出 右或下 视频（左右并排）", "stereo-right-sbs")
+            .checked(key == "right-sbs"),
+        MenuEntry::action("立体红/青绿 Gray 色算法（左右并排）", "stereo-anaglyph-sbs")
+            .checked(key == "anaglyph-sbs"),
+        MenuEntry::action("仅输出 左或上 视频（上下）", "stereo-left-tab").checked(key == "left-tab"),
+        MenuEntry::action("仅输出 右或下 视频（上下）", "stereo-right-tab")
+            .checked(key == "right-tab"),
+        MenuEntry::action("立体红/青绿 Gray 色算法（上下）", "stereo-anaglyph-tab")
+            .checked(key == "anaglyph-tab"),
+    ];
+    vec![
+        MenuEntry::submenu("输出方式", output),
+        MenuEntry::separator(),
+        MenuEntry::action("3D 视频输出设置...", "control-video").with_shortcut("J"),
+    ]
+}
+
 pub enum FrameAction {
     Exit,
     ToggleFullscreen,
     Action(String),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ToolbarMenu {
+    Panorama,
+    Stereo,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -80,11 +130,13 @@ impl CpuMeter {
 pub struct PlayerFrameController {
     pub(crate) playback: Entity<PlaybackController>,
     pub(crate) capture: Entity<CaptureController>,
+    pub(crate) extras: Vec<Entity<CaptureController>>,
     pub(crate) playlist: Entity<PlaylistController>,
     pub(crate) settings: Entity<SettingsController>,
     menu: Vec<MenuEntry>,
     menu_open: bool,
     open_path: Vec<usize>,
+    menu_anchor: Option<(f32, f32)>,
     notice: Option<String>,
     focus_handle: FocusHandle,
     repeat: bool,
@@ -117,6 +169,18 @@ pub struct PlayerFrameController {
     active_panel: u8,
     last_fingerprint: String,
     cpu: CpuMeter,
+    pub(crate) display_size: (u32, u32),
+    pub(crate) control_open: bool,
+    pub(crate) control_tab: usize,
+    toolbar_menu: Option<ToolbarMenu>,
+    pub(crate) eq_enabled: bool,
+    pub(crate) eq_preset: usize,
+    pub(crate) eq_bands: [i16; 10],
+    pub(crate) sub_size: i16,
+    pub(crate) sub_pos: i16,
+    pub(crate) sub_speed: f64,
+    sub_delay: f64,
+    hue: i16,
 }
 
 impl PlayerFrameController {
@@ -135,6 +199,7 @@ impl PlayerFrameController {
         let brightness = config.brightness;
         let contrast = config.contrast;
         let saturation = config.saturation;
+        let hue = config.hue;
         let rotation = config.rotation;
         let flip_horizontal = config.flip_horizontal;
         let flip_vertical = config.flip_vertical;
@@ -161,11 +226,13 @@ impl PlayerFrameController {
         Self {
             playback,
             capture: cx.new(|_| CaptureController::new()),
+            extras: Vec::new(),
             playlist,
             settings: cx.new(|_| SettingsController::new(config.capture_selections.clone())),
             menu,
             menu_open: false,
             open_path: Vec::new(),
+            menu_anchor: None,
             notice: None,
             focus_handle: cx.focus_handle(),
             repeat: false,
@@ -198,6 +265,18 @@ impl PlayerFrameController {
             active_panel: 1,
             last_fingerprint: String::new(),
             cpu: CpuMeter::new(),
+            display_size: (0, 0),
+            control_open: false,
+            control_tab: 0,
+            toolbar_menu: None,
+            eq_enabled: false,
+            eq_preset: 0,
+            eq_bands: [0; 10],
+            sub_size: 18,
+            sub_pos: 50,
+            sub_speed: 1.0,
+            sub_delay: 0.0,
+            hue,
         }
     }
 
@@ -206,12 +285,33 @@ impl PlayerFrameController {
     }
 
     pub(crate) fn open_settings(&mut self, tab: usize, cx: &mut Context<Self>) {
-        let (width, height) = (self.config.width, self.config.height);
+        let (width, height) = (self.config.screen1_width, self.config.screen1_height);
         let fps = self.config.fps;
+        let smoothing = self.config.capture_smoothing.clone();
+        let active = self.capture.read(cx).source().map(str::to_string);
         self.settings.update(cx, |settings, cx| {
             settings.set_capture_size(width, height, fps);
+            settings.set_smoothing_key(smoothing);
+            settings.set_active_source(active);
             settings.open(tab, cx);
         });
+    }
+
+    pub(crate) fn capture_entities(&self) -> Vec<Entity<CaptureController>> {
+        std::iter::once(self.capture.clone())
+            .chain(self.extras.iter().cloned())
+            .collect()
+    }
+
+    pub(crate) fn stop_capture(&mut self, cx: &mut Context<Self>) {
+        self.capture.update(cx, |capture, cx| capture.stop(cx));
+        self.stop_extras(cx);
+    }
+
+    pub(crate) fn stop_extras(&mut self, cx: &mut Context<Self>) {
+        for extra in self.extras.drain(..) {
+            extra.update(cx, |capture, cx| capture.stop(cx));
+        }
     }
 
     pub fn configure_source(
@@ -324,6 +424,13 @@ impl PlayerFrameController {
                 }
             }
         }
+        if self.config.pano_mode == "auto" && loaded && width > 0 && height > 0 {
+            let looks_panoramic = (width as i64 - 2 * height as i64).abs() <= 8;
+            if looks_panoramic != self.config.pano_enabled {
+                self.config.pano_enabled = looks_panoramic;
+                self.apply_pano(cx);
+            }
+        }
         if let Some(target) = self.resume_pending {
             if loaded && duration > 0.0 {
                 self.resume_pending = None;
@@ -377,7 +484,7 @@ impl PlayerFrameController {
             }
             "close-panel" => {
                 self.playback.update(cx, |playback, cx| playback.stop(cx));
-                self.capture.update(cx, |capture, cx| capture.stop(cx));
+                self.stop_capture(cx);
             }
             "open-device" => {
                 self.show_notice("请从「摄像头/其他设备」选择采集设备", cx);
@@ -754,7 +861,16 @@ impl PlayerFrameController {
             "stereo-left-tab" => self.set_stereo_mode("left-tab", cx),
             "stereo-right-tab" => self.set_stereo_mode("right-tab", cx),
             "pano-toggle" => self.toggle_pano(cx),
+            "pano-on" => self.set_pano_mode("on", cx),
+            "pano-off" => self.set_pano_mode("off", cx),
+            "pano-always" => self.set_pano_mode("always", cx),
+            "pano-auto" => self.set_pano_mode("auto", cx),
             "pano-reset" => self.reset_pano(cx),
+            "control-video" => {
+                self.control_open = true;
+                self.control_tab = 1;
+                cx.notify();
+            }
             "renderer-auto" | "renderer-opengl" | "renderer-null-compressed"
             | "renderer-null-uncompressed" => self.set_renderer(action.as_str(), cx),
             "record" => self.toggle_recording(cx),
@@ -791,7 +907,7 @@ impl PlayerFrameController {
             "capture-slot2" | "capture-start2" => self.start_screen_capture(2, cx),
             "capture-size1" => self.prompt_capture_size(1, cx),
             "capture-size2" => self.prompt_capture_size(2, cx),
-            "capture-smoothing" => self.prompt_capture_smoothing(cx),
+            "capture-smoothing" => self.open_settings(0, cx),
             "open-url" | "open-network" => self.prompt_open_url(cx),
             "browser" => self.prompt_external_browser(cx),
             "live-search" => self.prompt_live_search(cx),
@@ -1286,17 +1402,46 @@ impl PlayerFrameController {
         self.show_notice(crate::i18n::trf("3D 输出：{label}", &[&label]), cx);
     }
 
-    fn toggle_pano(&mut self, cx: &mut Context<Self>) {
-        self.config.pano_enabled = !self.config.pano_enabled;
+    pub(crate) fn toolbar_menu(&self) -> Option<ToolbarMenu> {
+        self.toolbar_menu
+    }
+
+    pub(crate) fn toggle_toolbar_menu(
+        &mut self,
+        kind: ToolbarMenu,
+        x: f32,
+        y: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if self.menu_open && self.toolbar_menu == Some(kind) {
+            self.close_menu(cx);
+            return;
+        }
+        self.toolbar_menu = Some(kind);
+        self.menu_open = true;
+        self.open_path.clear();
+        self.menu_anchor = Some((x, y));
+        self.rebuild_menu(cx);
+        cx.notify();
+    }
+
+    fn set_pano_mode(&mut self, mode: &str, cx: &mut Context<Self>) {
+        self.config.pano_mode = mode.to_string();
+        self.config.pano_enabled = matches!(mode, "on" | "always");
         self.save_config();
         self.apply_pano(cx);
-        self.show_notice(
-            format!(
-                "360° 视频：{}",
-                if self.config.pano_enabled { "开" } else { "关" }
-            ),
-            cx,
-        );
+        let label = match mode {
+            "on" => "播放",
+            "always" => "总是播放",
+            "auto" => "自动判断",
+            _ => "不播放",
+        };
+        self.show_notice(format!("360° 视频：{label}"), cx);
+    }
+
+    fn toggle_pano(&mut self, cx: &mut Context<Self>) {
+        let mode = if self.config.pano_enabled { "off" } else { "on" };
+        self.set_pano_mode(mode, cx);
     }
 
     fn reset_pano(&mut self, cx: &mut Context<Self>) {
@@ -1321,6 +1466,15 @@ impl PlayerFrameController {
             .update(cx, |playback, cx| playback.set_pano(view, cx));
     }
 
+    pub(crate) fn renderer_label(&self) -> &'static str {
+        match self.config.video_renderer.as_str() {
+            "opengl" => "内置 OpenGL 视频渲染器",
+            "null-compressed" => "空视频渲染器(压缩)",
+            "null-uncompressed" => "空视频渲染器(未压缩)",
+            _ => "自动选择(推荐)",
+        }
+    }
+
     fn set_renderer(&mut self, action: &str, cx: &mut Context<Self>) {
         let (key, label) = match action {
             "renderer-opengl" => ("opengl", "内置 OpenGL 视频渲染器"),
@@ -1342,6 +1496,10 @@ impl PlayerFrameController {
     }
 
     fn toggle_recording(&mut self, cx: &mut Context<Self>) {
+        if self.capture.read(cx).is_active() {
+            self.toggle_capture_recording(cx);
+            return;
+        }
         if self.playback.read(cx).is_recording() {
             let result = self.playback.update(cx, |playback, _| playback.stop_recording());
             match result {
@@ -1394,6 +1552,47 @@ impl PlayerFrameController {
         let result = self
             .playback
             .update(cx, |playback, _| playback.start_recording(&path, fps));
+        match result {
+            Ok(()) => self.show_notice(crate::i18n::trf("开始录制：{}", &[&path.display()]), cx),
+            Err(error) => self.show_notice(crate::i18n::trf("无法录制：{error}", &[&error]), cx),
+        }
+    }
+
+    fn toggle_capture_recording(&mut self, cx: &mut Context<Self>) {
+        if self.capture.read(cx).is_recording() {
+            let result = self.capture.read(cx).stop_recording();
+            match result {
+                Some(Ok(summary)) => self.show_notice(
+                    format!(
+                        "录制已保存：{}（{} 帧，丢弃 {} 帧）",
+                        summary.path.display(),
+                        summary.frames,
+                        summary.dropped
+                    ),
+                    cx,
+                ),
+                Some(Err(error)) => {
+                    self.show_notice(crate::i18n::trf("录制失败：{error}", &[&error]), cx)
+                }
+                None => {}
+            }
+            return;
+        }
+        if !self.capture.read(cx).is_active() {
+            self.show_notice("当前没有可录制的画面", cx);
+            return;
+        }
+        let directory = self.config.video_record_dir.clone();
+        if let Err(error) = std::fs::create_dir_all(&directory) {
+            self.show_notice(crate::i18n::trf("创建录制目录失败：{error}", &[&error]), cx);
+            return;
+        }
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or(0);
+        let path = directory.join(format!("flintplayer_{millis}.mp4"));
+        let result = self.capture.read(cx).start_recording(&path);
         match result {
             Ok(()) => self.show_notice(crate::i18n::trf("开始录制：{}", &[&path.display()]), cx),
             Err(error) => self.show_notice(crate::i18n::trf("无法录制：{error}", &[&error]), cx),
@@ -1508,11 +1707,18 @@ impl PlayerFrameController {
 
     fn start_screen_capture(&mut self, slot: u32, cx: &mut Context<Self>) {
         let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-        let source = format!("screen{slot}:{display}");
-        let (width, height) = if slot == 2 {
-            (self.config.screen2_width, self.config.screen2_height)
+        let selected = self.settings.read(cx).screen_source(slot);
+        let source = selected.unwrap_or_else(|| format!("screen{slot}:{display}"));
+        let window_capture = source.contains(":window:");
+        let (width, height) = if window_capture {
+            (0, 0)
         } else {
-            (self.config.screen1_width, self.config.screen1_height)
+            self.screen_size(slot)
+        };
+        let name = if window_capture {
+            format!("窗口采集 {slot}#")
+        } else {
+            format!("X11 屏幕采集 {slot}#")
         };
         let fps = self.config.fps.max(1);
         self.playback
@@ -1520,7 +1726,7 @@ impl PlayerFrameController {
         self.capture.update(cx, |capture, cx| {
             capture.start_with(
                 source,
-                format!("X11 屏幕采集 {slot}#"),
+                name,
                 CaptureSettings {
                     width,
                     height,
@@ -1529,6 +1735,7 @@ impl PlayerFrameController {
                     input_format: None,
                     pixel_format: None,
                     smoothing: CaptureSmoothing::from_key(&self.config.capture_smoothing),
+                    yuv_output: true,
                 },
                 cx,
             )
@@ -1536,8 +1743,23 @@ impl PlayerFrameController {
         self.show_notice(crate::i18n::trf("开始采集屏幕 {slot}#", &[&slot]), cx);
     }
 
+    fn screen_size(&self, slot: u32) -> (u32, u32) {
+        let (width, height) = if slot == 2 {
+            (self.config.screen2_width, self.config.screen2_height)
+        } else {
+            (self.config.screen1_width, self.config.screen1_height)
+        };
+        if width > 0 && height > 0 {
+            return (width, height);
+        }
+        if self.display_size.0 > 0 && self.display_size.1 > 0 {
+            return self.display_size;
+        }
+        (1920, 1080)
+    }
+
     fn prompt_capture_size(&mut self, slot: u32, cx: &mut Context<Self>) {
-        let title = format!("截屏 {slot} 尺寸设置");
+        let title = format!("截屏 {slot} 尺寸设置（留空为全屏）");
         let forms = cx.background_executor().spawn(async move {
             zenity_forms(&title, &[("宽度", ""), ("高度", "")])
         });
@@ -1547,8 +1769,15 @@ impl PlayerFrameController {
                 return;
             };
             let parse = |value: Option<&String>, fallback: u32| {
-                value
-                    .and_then(|value| value.trim().parse::<u32>().ok())
+                let Some(value) = value else {
+                    return fallback;
+                };
+                let text = value.trim();
+                if text.is_empty() {
+                    return 0;
+                }
+                text.parse::<u32>()
+                    .ok()
                     .filter(|value| (16..=8192).contains(value))
                     .unwrap_or(fallback)
             };
@@ -1561,62 +1790,45 @@ impl PlayerFrameController {
                     this.config.screen1_height = parse(values.get(1), this.config.screen1_height);
                 }
                 this.save_config();
-                let (width, height) = if slot == 2 {
-                    (this.config.screen2_width, this.config.screen2_height)
-                } else {
-                    (this.config.screen1_width, this.config.screen1_height)
-                };
+                let (width, height) = this.screen_size(slot);
                 this.show_notice(crate::i18n::trf("截屏 {slot} 尺寸：{width}×{height}", &[&slot, &width, &height]), cx);
             });
         })
         .detach();
     }
 
-    fn prompt_capture_smoothing(&mut self, cx: &mut Context<Self>) {
-        const OPTIONS: [(&str, &str); 6] = [
-            ("none", "不使用平滑滤镜"),
-            ("system", "使用系统默认平滑滤镜(慢)"),
-            ("low", "使用 PotPlayer 低品质平滑滤镜"),
-            ("normal", "使用 PotPlayer 普通品质平滑滤镜"),
-            ("medium", "使用 PotPlayer 适中品质平滑滤镜"),
-            ("high", "使用 PotPlayer 高品质平滑滤镜"),
-        ];
-        let current = OPTIONS
-            .iter()
-            .position(|option| option.0 == self.config.capture_smoothing.as_str())
-            .unwrap_or(1);
-        let labels: Vec<String> = OPTIONS
-            .iter()
-            .map(|option| crate::i18n::tr(option.1))
-            .collect();
-        let rows: Vec<Vec<String>> = labels.iter().map(|label| vec![label.clone()]).collect();
-        let title = crate::i18n::tr("屏幕采集设置");
-        let text = crate::i18n::tr(
-            "选择更改图像尺寸时使用的滤镜。因使用平滑滤镜会造成CPU负载过高，所以如非必要请勿使用。",
-        );
-        let list = cx.background_executor().spawn(async move {
-            zenity_radio_list(&title, &text, &["平滑滤镜"], rows, current, 460)
-        });
-        let this = cx.entity().downgrade();
+    pub(crate) fn choose_camera_device(&mut self, cx: &mut Context<Self>) {
+        if !zenity_available() {
+            self.show_notice(crate::i18n::tr("需要 zenity 才能浏览设备"), cx);
+            return;
+        }
+        let picked = cx
+            .background_executor()
+            .spawn(async { zenity_device_path() });
+        let settings = self.settings.clone();
         cx.spawn(async move |_this, cx| {
-            let Some(choice) = list.await.and_then(|cells| cells.into_iter().next()) else {
-                return;
-            };
-            let Some(index) = labels.iter().position(|label| *label == choice) else {
-                return;
-            };
-            let key = OPTIONS[index].0.to_string();
-            let _ = this.update(cx, |this, cx| {
-                this.config.capture_smoothing = key.clone();
-                this.save_config();
-                this.capture.update(cx, |capture, cx| {
-                    capture.set_smoothing(CaptureSmoothing::from_key(&key), cx)
-                });
-                let prefix = crate::i18n::tr("平滑滤镜");
-                this.show_notice(crate::i18n::trf("{prefix}: {choice}", &[&prefix, &choice]), cx);
-            });
+            if let Some(path) = picked.await {
+                settings.update(cx, |settings, cx| settings.select_manual_device(path, cx));
+            }
         })
         .detach();
+    }
+
+    pub(crate) fn apply_capture_smoothing(&mut self, key: String, cx: &mut Context<Self>) {
+        self.config.capture_smoothing = key.clone();
+        self.save_config();
+        self.capture.update(cx, |capture, cx| {
+            capture.set_smoothing(CaptureSmoothing::from_key(&key), cx)
+        });
+        self.settings
+            .update(cx, |settings, _| settings.set_smoothing_key(key.clone()));
+        let label = SMOOTHING_OPTIONS
+            .iter()
+            .find(|(option, _)| *option == key)
+            .map(|(_, label)| crate::i18n::tr(label))
+            .unwrap_or_default();
+        let prefix = crate::i18n::tr("平滑滤镜");
+        self.show_notice(crate::i18n::trf("{prefix}: {choice}", &[&prefix, &label]), cx);
     }
 
     fn prompt_open_url(&mut self, cx: &mut Context<Self>) {
@@ -2266,7 +2478,7 @@ impl PlayerFrameController {
     fn select_panel(&mut self, panel: u8, cx: &mut Context<Self>) {
         match panel {
             1 => {
-                self.capture.update(cx, |capture, cx| capture.stop(cx));
+                self.stop_capture(cx);
                 self.active_panel = 1;
                 if !self.playback.read(cx).is_loaded() {
                     if let Some(path) = self.current_media(cx) {
@@ -2633,6 +2845,17 @@ impl PlayerFrameController {
     }
 
     pub fn rebuild_menu(&mut self, cx: &mut Context<Self>) {
+        if let Some(kind) = self.toolbar_menu {
+            self.menu = match kind {
+                ToolbarMenu::Panorama => panorama_menu(&self.config.pano_mode),
+                ToolbarMenu::Stereo => {
+                    let stereo = self.playback.read(cx).stereo();
+                    stereo_menu(stereo)
+                }
+            };
+            menu::translate_titles(&mut self.menu);
+            return;
+        }
         let data = {
             let playback = self.playback.read(cx);
             let playlist = self.playlist.read(cx);
@@ -2805,18 +3028,36 @@ impl PlayerFrameController {
         menu::translate_titles(&mut self.menu);
     }
 
-    pub fn toggle_menu(&mut self, cx: &mut Context<Self>) {        self.menu_open = !self.menu_open;
+    pub fn toggle_menu(&mut self, cx: &mut Context<Self>) {
+        self.toolbar_menu = None;
+        self.menu_open = !self.menu_open;
         self.open_path.clear();
+        self.menu_anchor = None;
         if self.menu_open {
             self.rebuild_menu(cx);
         }
         cx.notify();
     }
 
+    pub fn open_menu_at(&mut self, x: f32, y: f32, cx: &mut Context<Self>) {
+        self.toolbar_menu = None;
+        self.menu_open = true;
+        self.open_path.clear();
+        self.menu_anchor = Some((x, y));
+        self.rebuild_menu(cx);
+        cx.notify();
+    }
+
     pub fn close_menu(&mut self, cx: &mut Context<Self>) {
         self.menu_open = false;
+        self.toolbar_menu = None;
         self.open_path.clear();
+        self.menu_anchor = None;
         cx.notify();
+    }
+
+    pub fn menu_anchor(&self) -> Option<(f32, f32)> {
+        self.menu_anchor
     }
 
     pub fn hover_row(&mut self, level: usize, index: usize, has_children: bool, cx: &mut Context<Self>) {
@@ -2832,7 +3073,9 @@ impl PlayerFrameController {
 
     pub fn activate(&mut self, action: Option<&str>, cx: &mut Context<Self>) -> Option<FrameAction> {
         self.menu_open = false;
+        self.toolbar_menu = None;
         self.open_path.clear();
+        self.menu_anchor = None;
         cx.notify();
         let action = action?;
         Some(match action {
@@ -2871,12 +3114,14 @@ impl PlayerFrameController {
         let changed = self.config.brightness != self.brightness
             || self.config.contrast != self.contrast
             || self.config.saturation != self.saturation
+            || self.config.hue != self.hue
             || self.config.rotation != self.rotation
             || self.config.flip_horizontal != self.flip_horizontal
             || self.config.flip_vertical != self.flip_vertical;
         self.config.brightness = self.brightness;
         self.config.contrast = self.contrast;
         self.config.saturation = self.saturation;
+        self.config.hue = self.hue;
         self.config.rotation = self.rotation;
         self.config.flip_horizontal = self.flip_horizontal;
         self.config.flip_vertical = self.flip_vertical;
@@ -2900,6 +3145,7 @@ impl PlayerFrameController {
             ("brightness", self.brightness.to_string()),
             ("contrast", self.contrast.to_string()),
             ("saturation", self.saturation.to_string()),
+            ("hue", self.hue.to_string()),
             ("video-rotate", self.rotation.to_string()),
             ("video-zoom", format!("{:.2}", self.zoom)),
             ("video-pan-x", format!("{:.2}", self.pan_x)),
@@ -2917,6 +3163,174 @@ impl PlayerFrameController {
     fn set_rotation(&mut self, rotation: u16, cx: &mut Context<Self>) {
         self.rotation = rotation % 360;
         self.apply_image(cx);
+    }
+
+    pub(crate) fn is_control_open(&self) -> bool {
+        self.control_open
+    }
+
+    pub(crate) fn control_tab(&self) -> usize {
+        self.control_tab
+    }
+
+    pub(crate) fn toggle_control_window(&mut self, cx: &mut Context<Self>) {
+        self.control_open = !self.control_open;
+        cx.notify();
+    }
+
+    pub(crate) fn close_control_window(&mut self, cx: &mut Context<Self>) {
+        self.control_open = false;
+        cx.notify();
+    }
+
+    pub(crate) fn set_control_tab(&mut self, tab: usize, cx: &mut Context<Self>) {
+        self.control_tab = tab.min(3);
+        cx.notify();
+    }
+
+    pub(crate) fn video_value(&self, channel: usize) -> i16 {
+        match channel {
+            0 => self.brightness,
+            1 => self.contrast,
+            2 => self.saturation,
+            _ => self.hue,
+        }
+    }
+
+    pub(crate) fn set_video_value(&mut self, channel: usize, value: i16, cx: &mut Context<Self>) {
+        let value = value.clamp(-100, 100);
+        match channel {
+            0 => self.brightness = value,
+            1 => self.contrast = value,
+            2 => self.saturation = value,
+            _ => self.hue = value,
+        }
+        self.apply_image(cx);
+    }
+
+    pub(crate) fn reset_video_values(&mut self, cx: &mut Context<Self>) {
+        self.brightness = 0;
+        self.contrast = 0;
+        self.saturation = 0;
+        self.hue = 0;
+        self.apply_image(cx);
+    }
+
+    pub(crate) fn eq_enabled(&self) -> bool {
+        self.eq_enabled
+    }
+
+    pub(crate) fn eq_bands(&self) -> [i16; 10] {
+        self.eq_bands
+    }
+
+    pub(crate) fn eq_preset_label(&self) -> String {
+        EQ_PRESETS[self.eq_preset.min(EQ_PRESETS.len() - 1)].0.to_string()
+    }
+
+    pub(crate) fn toggle_equalizer(&mut self, cx: &mut Context<Self>) {
+        self.eq_enabled = !self.eq_enabled;
+        self.apply_equalizer(cx);
+    }
+
+    pub(crate) fn cycle_eq_preset(&mut self, cx: &mut Context<Self>) {
+        self.eq_preset = (self.eq_preset + 1) % EQ_PRESETS.len();
+        self.eq_bands = EQ_PRESETS[self.eq_preset].1;
+        self.eq_enabled = true;
+        self.apply_equalizer(cx);
+    }
+
+    pub(crate) fn set_eq_band(&mut self, index: usize, gain: i16, cx: &mut Context<Self>) {
+        let Some(band) = self.eq_bands.get_mut(index) else {
+            return;
+        };
+        *band = gain.clamp(-12, 12);
+        self.apply_equalizer(cx);
+    }
+
+    fn apply_equalizer(&mut self, cx: &mut Context<Self>) {
+        let command = if self.eq_enabled {
+            let chain = self
+                .eq_bands
+                .iter()
+                .zip(EQ_FREQUENCIES)
+                .map(|(gain, freq)| format!("equalizer=f={freq}:t=o:w=1:g={gain}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("af set {chain}")
+        } else {
+            "af clr".to_string()
+        };
+        self.playback.update(cx, |playback, cx| playback.command(&command, cx));
+        cx.notify();
+    }
+
+    pub(crate) fn subtitle_value(&self, slot: usize) -> f64 {
+        match slot {
+            0 => self.sub_size as f64,
+            1 => self.sub_pos as f64,
+            2 => self.sub_speed,
+            _ => self.sub_delay,
+        }
+    }
+
+    pub(crate) fn set_subtitle_value(&mut self, slot: usize, value: f64, cx: &mut Context<Self>) {
+        match slot {
+            0 => self.sub_size = value.clamp(8.0, 72.0) as i16,
+            1 => self.sub_pos = value.clamp(0.0, 100.0) as i16,
+            2 => self.sub_speed = value.clamp(0.5, 3.0),
+            _ => self.sub_delay = value.clamp(-5.0, 5.0),
+        }
+        let values = [
+            ("sub-font-size", self.sub_size.to_string()),
+            ("sub-pos", self.sub_pos.to_string()),
+            ("sub-speed", format!("{:.2}", self.sub_speed)),
+            ("sub-delay", format!("{:.1}", self.sub_delay)),
+        ];
+        self.playback.update(cx, |playback, cx| {
+            for (name, value) in &values {
+                playback.set_property(name, value, cx);
+            }
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn playback_position(&self, cx: &Context<Self>) -> (f64, f64) {
+        let state = self.playback.read(cx).state();
+        (state.position, state.duration)
+    }
+
+    pub(crate) fn control_seek(&mut self, fraction: f64, cx: &mut Context<Self>) {
+        self.playback
+            .update(cx, |playback, cx| playback.seek_fraction(fraction, cx));
+    }
+
+    pub(crate) fn control_set_speed(&mut self, speed: f64, cx: &mut Context<Self>) {
+        self.playback.update(cx, |playback, cx| playback.set_speed(speed, cx));
+    }
+
+    pub(crate) fn mark_ab(&mut self, end: bool, cx: &mut Context<Self>) {
+        let position = self.playback.read(cx).state().position;
+        let value = format!("{position:.3}");
+        let property = if end { "ab-loop-b" } else { "ab-loop-a" };
+        self.playback
+            .update(cx, |playback, cx| playback.set_property(property, &value, cx));
+        self.show_notice(
+            if end {
+                format!("B 点已设置: {position:.2}s")
+            } else {
+                format!("A 点已设置: {position:.2}s")
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn clear_ab(&mut self, cx: &mut Context<Self>) {
+        self.playback.update(cx, |playback, cx| {
+            playback.set_property("ab-loop-a", "no", cx);
+            playback.set_property("ab-loop-b", "no", cx);
+        });
+        self.show_notice("已取消 A-B 区段", cx);
     }
 
     pub(crate) fn toggle_osd_shortcut(&mut self, mode: OsdMode, cx: &mut Context<Self>) {
@@ -2937,7 +3351,11 @@ impl PlayerFrameController {
         cx.notify();
     }
 
-    fn take_snapshot(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn take_snapshot(&mut self, cx: &mut Context<Self>) {
+        if self.capture.read(cx).is_active() {
+            self.take_capture_snapshot(cx);
+            return;
+        }
         if !self.playback.read(cx).is_loaded() {
             self.show_notice("当前没有可截取的画面", cx);
             return;
@@ -2989,6 +3407,32 @@ impl PlayerFrameController {
             .update(cx, |playback, cx| playback.command(&command, cx));
         self.last_snapshot = Some(path.clone());
         self.show_notice(crate::i18n::trf("已截取：{}", &[&path.display()]), cx);
+    }
+
+    fn take_capture_snapshot(&mut self, cx: &mut Context<Self>) {
+        let directory = self.config.snapshot_dir.clone();
+        if let Err(error) = std::fs::create_dir_all(&directory) {
+            self.show_notice(crate::i18n::trf("创建截图目录失败：{error}", &[&error]), cx);
+            return;
+        }
+        let extension = match self.config.snapshot_format.as_str() {
+            "jpeg" => "jpg",
+            "bmp" => "bmp",
+            _ => "png",
+        };
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or(0);
+        let path = directory.join(format!("flintplayer_{millis}.{extension}"));
+        let result = self.capture.read(cx).take_snapshot(&path);
+        match result {
+            Ok(()) => {
+                self.last_snapshot = Some(path.clone());
+                self.show_notice(crate::i18n::trf("已截取：{}", &[&path.display()]), cx);
+            }
+            Err(error) => self.show_notice(crate::i18n::trf("截图失败：{error}", &[&error]), cx),
+        }
     }
 
     fn set_snapshot_format(&mut self, format: &str, cx: &mut Context<Self>) {
@@ -3120,8 +3564,25 @@ fn zenity_pick(prompt: &str, directories: bool, multiple: bool) -> Option<Vec<st
     (!paths.is_empty()).then_some(paths)
 }
 
-fn zenity_entry(title: &str, text: &str) -> Option<String> {
+fn zenity_device_path() -> Option<String> {
     let output = std::process::Command::new("zenity")
+        .args([
+            "--file-selection",
+            "--title",
+            "选择视频设备",
+            "--filename",
+            "/dev/video0",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!value.is_empty()).then_some(value)
+}
+
+fn zenity_entry(title: &str, text: &str) -> Option<String> {    let output = std::process::Command::new("zenity")
         .args(["--entry", "--title", title, "--text", text])
         .output()
         .ok()?;

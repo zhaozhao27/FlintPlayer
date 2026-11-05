@@ -16,7 +16,7 @@ pub const CHEVRON_DOWN: u8 = 24;
 pub const SIDEBAR: u8 = 27;
 pub const PIN: u8 = 28;
 pub const OPEN: u8 = 30;
-pub const SETTINGS: u8 = 31;
+pub const SETTINGS: u8 = 32;
 
 fn bytes(kind: u8) -> &'static [u8] {
     match kind {
@@ -37,6 +37,7 @@ fn bytes(kind: u8) -> &'static [u8] {
         28 => include_bytes!("../assets/icons/kind28.svg"),
         30 => include_bytes!("../assets/icons/kind30.svg"),
         31 => include_bytes!("../assets/icons/kind31.svg"),
+        32 => include_bytes!("../assets/icons/kind32.svg"),
         _ => include_bytes!("../assets/icons/kind00.svg"),
     }
 }

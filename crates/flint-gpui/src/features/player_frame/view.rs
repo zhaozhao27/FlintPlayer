@@ -211,18 +211,19 @@ impl PlayerFrameController {
         &self,
         level: usize,
         max_bottom: f32,
+        max_right: f32,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let entries = self.entries_at(level);
         if entries.is_empty() {
             return None;
         }
-        let x = 8.0 + level as f32 * PANEL_WIDTH;
+        let x = self.menu_level_left(level, max_right);
         let mut y = self.menu_level_top(level, max_bottom);
         let mut available = (max_bottom - y).max(120.0);
-        let mut row_height = menu_row_height(entries, available);
+        let mut row_height = theme::MENU_ROW_HEIGHT;
         let content = menu_panel_height(entries, row_height);
-        if level > 0 && y + content > max_bottom {
+        if (level > 0 || self.menu_anchor().is_some()) && y + content > max_bottom {
             y = (max_bottom - content).max(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
             available = (max_bottom - y).max(120.0);
             row_height = menu_row_height(entries, available);
@@ -239,6 +240,7 @@ impl PlayerFrameController {
             .bg(rgb(theme::MENU_BG))
             .border_1()
             .border_color(rgb(theme::MENU_BORDER))
+            .occlude()
             .on_click(cx.listener(|_, _, _, cx| cx.stop_propagation()));
 
         for (index, entry) in entries.iter().enumerate() {
@@ -247,8 +249,17 @@ impl PlayerFrameController {
         Some(panel.into_any())
     }
 
+    fn menu_level_left(&self, level: usize, max_right: f32) -> f32 {
+        let base = self.menu_anchor().map(|(x, _)| x).unwrap_or(8.0);
+        let left = base + level as f32 * PANEL_WIDTH;
+        left.min((max_right - PANEL_WIDTH - 8.0).max(8.0))
+    }
+
     fn menu_level_top(&self, level: usize, max_bottom: f32) -> f32 {
-        let mut top = theme::TITLEBAR_HEIGHT + PANEL_PADDING;
+        let mut top = self
+            .menu_anchor()
+            .map(|(_, y)| y.max(theme::TITLEBAR_HEIGHT + PANEL_PADDING))
+            .unwrap_or(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
         for depth in 0..level {
             let Some(&index) = self.open_path().get(depth) else {
                 break;
@@ -550,6 +561,13 @@ impl Render for PlayerFrameController {
             self.ticker_started = true;
             self.start_ticker(cx);
         }
+        if let Some(display) = window.display(cx) {
+            let size = display.visible_bounds().size;
+            self.display_size = (
+                f32::from(size.width).max(1.0) as u32,
+                f32::from(size.height).max(1.0) as u32,
+            );
+        }
         if let Some(path) = self.pending_open.take() {
             self.open_media(&path, cx);
         }
@@ -577,10 +595,20 @@ impl Render for PlayerFrameController {
         if let Some(mut request) = self.settings.update(cx, |settings, _| settings.take_request()) {
             request.settings.smoothing =
                 flint_media::CaptureSmoothing::from_key(&self.config.capture_smoothing);
-            self.playback.update(cx, |playback, cx| playback.stop(cx));
-            self.capture.update(cx, |capture, cx| {
-                capture.start_with(request.source, request.name, request.settings, cx)
-            });
+            let target = request.source.clone();
+            if request.split && self.capture.read(cx).source() != Some(target.as_str()) {
+                let extra = cx.new(|_| crate::features::capture::CaptureController::new());
+                extra.update(cx, |capture, cx| {
+                    capture.start_with(request.source, request.name, request.settings, cx)
+                });
+                self.extras.push(extra);
+            } else {
+                self.playback.update(cx, |playback, cx| playback.stop(cx));
+                self.stop_extras(cx);
+                self.capture.update(cx, |capture, cx| {
+                    capture.start_with(request.source, request.name, request.settings, cx)
+                });
+            }
         }
         if let Some(selections) = self
             .settings
@@ -593,6 +621,9 @@ impl Render for PlayerFrameController {
             .update(cx, |playback, _| playback.upload_frame(window));
         self.capture
             .update(cx, |capture, _| capture.upload_frame(window));
+        for extra in &self.extras {
+            extra.update(cx, |capture, _| capture.upload_frame(window));
+        }
 
         let target = cx.entity().downgrade();
         let drop_handler = move |paths: &ExternalPaths, _: &mut Window, cx: &mut App| {
@@ -603,14 +634,36 @@ impl Render for PlayerFrameController {
 
         let capturing = self.capture.read(cx).is_active();
         let canvas = if capturing {
-            capture::view::video_canvas(&self.capture, cx)
+            let entities = self.capture_entities();
+            if entities.len() <= 1 {
+                capture::view::video_canvas(&self.capture, cx)
+            } else {
+                let mut grid = div().size_full().flex().flex_col().gap(px(2.0));
+                for chunk in entities.chunks(2) {
+                    let mut row = div().flex_1().w_full().flex().gap(px(2.0));
+                    for entity in chunk {
+                        row = row.child(
+                            div()
+                                .flex_1()
+                                .h_full()
+                                .overflow_hidden()
+                                .child(capture::view::video_canvas(entity, cx)),
+                        );
+                    }
+                    if chunk.len() == 1 {
+                        row = row.child(div().flex_1());
+                    }
+                    grid = grid.child(row);
+                }
+                grid.into_any_element()
+            }
         } else {
             playback::view::video_canvas(&self.playback, cx)
         };
         let viewport = window.viewport_size();
         let viewport_width = f32::from(viewport.width);
         let viewport_height = f32::from(viewport.height);
-        let controls = control_bar(self, capturing, viewport_width, cx);
+        let controls = control_bar(self, capturing, viewport_width, viewport_height, cx);
 
         let scale_x = (self.config.frame_scale_x.clamp(10, 400) as f32) / 100.0;
         let scale_y = (self.config.frame_scale_y.clamp(10, 400) as f32) / 100.0;
@@ -682,16 +735,31 @@ impl Render for PlayerFrameController {
                 this.handle_key(event, window, cx);
             }))
             .on_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                if !this.playback.read(cx).analysis_mode() {
+                if event.button == MouseButton::Right {
+                    if this.is_menu_open() {
+                        this.close_menu(cx);
+                    } else {
+                        this.open_menu_at(
+                            f32::from(event.position.x),
+                            f32::from(event.position.y),
+                            cx,
+                        );
+                    }
+                    cx.stop_propagation();
                     return;
                 }
                 let delta = match event.button {
-                    MouseButton::Navigate(NavigationDirection::Back) => -1,
-                    MouseButton::Navigate(NavigationDirection::Forward) => 1,
+                    MouseButton::Navigate(NavigationDirection::Back) => -1.0,
+                    MouseButton::Navigate(NavigationDirection::Forward) => 1.0,
                     _ => return,
                 };
-                this.playback
-                    .update(cx, |playback, cx| playback.step_frame(delta, cx));
+                if this.playback.read(cx).analysis_mode() {
+                    this.playback
+                        .update(cx, |playback, cx| playback.step_frame(delta as i64, cx));
+                } else {
+                    this.playback
+                        .update(cx, |playback, cx| playback.seek_relative(delta * 5.0, cx));
+                }
                 cx.stop_propagation();
             }))
             .on_drop::<ExternalPaths>(drop_handler)
@@ -717,6 +785,10 @@ impl Render for PlayerFrameController {
             root = root.child(analysis);
         }
 
+        if self.is_control_open() {
+            root = root.child(super::control_window::control_window(self, cx));
+        }
+
         if self.is_menu_open() {
             let backdrop = div()
                 .id("menu-backdrop")
@@ -727,10 +799,16 @@ impl Render for PlayerFrameController {
                 .bottom_0()
                 .on_click(cx.listener(|this, _, _, cx| this.close_menu(cx)));
             root = root.child(backdrop);
-            let menu_bottom = f32::from(window.viewport_size().height) - 8.0;
+            let menu_bottom = if self.toolbar_menu().is_some() {
+                viewport_height - theme::CONTROL_BAR_HEIGHT - 4.0
+            } else {
+                viewport_height - 8.0
+            };
             let levels = self.open_path().len() + 1;
             for level in 0..levels {
-                if let Some(panel) = self.render_menu_level(level, menu_bottom, cx) {
+                if let Some(panel) =
+                    self.render_menu_level(level, menu_bottom, viewport_width, cx)
+                {
                     root = root.child(panel);
                 }
             }

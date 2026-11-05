@@ -1,4 +1,4 @@
 pub mod controller;
 pub mod view;
 
-pub use controller::SettingsController;
+pub use controller::{SettingsController, SMOOTHING_OPTIONS};

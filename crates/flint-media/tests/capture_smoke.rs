@@ -11,6 +11,7 @@ fn settings(width: u32, height: u32) -> CaptureSettings {
         input_format: None,
         pixel_format: None,
         smoothing: Default::default(),
+        yuv_output: true,
     }
 }
 

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use gpui::*;
 
-use super::controller::PlayerFrameController;
+use super::controller::{PlayerFrameController, ToolbarMenu};
 use crate::icons::{self, icon};
 use crate::i18n::tr;
 use crate::theme;
@@ -12,6 +12,7 @@ pub fn control_bar(
     frame: &PlayerFrameController,
     capturing: bool,
     width: f32,
+    height: f32,
     cx: &mut Context<PlayerFrameController>,
 ) -> AnyElement {
     let (
@@ -343,7 +344,7 @@ pub fn control_bar(
                 return;
             }
             if capturing {
-                this.capture.update(cx, |capture, cx| capture.stop(cx));
+                this.stop_capture(cx);
             } else {
                 this.playback.update(cx, |playback, cx| playback.stop(cx));
             }
@@ -408,8 +409,32 @@ pub fn control_bar(
 
     row = row
         .child(div().flex_1())
-        .child(cluster_label("cluster-360", "360°"))
-        .child(cluster_label("cluster-3d", "3D"))
+        .child(
+            cluster_label("cluster-360", "360°")
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.toggle_toolbar_menu(
+                        ToolbarMenu::Panorama,
+                        width - 196.0,
+                        height - theme::CONTROL_BAR_HEIGHT - 4.0,
+                        cx,
+                    );
+                })),
+        )
+        .child(
+            cluster_label("cluster-3d", "3D")
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.toggle_toolbar_menu(
+                        ToolbarMenu::Stereo,
+                        width - 164.0,
+                        height - theme::CONTROL_BAR_HEIGHT - 4.0,
+                        cx,
+                    );
+                })),
+        )
         .child(cluster_button(
             "cluster-ratio",
             icons::RATIO,
@@ -429,7 +454,7 @@ pub fn control_bar(
                 true,
             )
             .on_click(cx.listener(|this, _, _, cx| {
-                this.open_settings(1, cx);
+                this.toggle_control_window(cx);
             })),
         )
         .child(

@@ -14,17 +14,40 @@ pub struct RecordSummary {
     pub dropped: u64,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InputFormat {
+    Rgba,
+    Nv12,
+}
+
 pub struct Recorder {
     tx: Option<Sender<Vec<u8>>>,
     worker: Option<JoinHandle<Result<PathBuf, String>>>,
     path: PathBuf,
     frames: Arc<AtomicU64>,
     dropped: Arc<AtomicU64>,
+    format: InputFormat,
+    width: usize,
+    height: usize,
     frame_bytes: usize,
 }
 
 impl Recorder {
     pub fn start(path: &Path, width: usize, height: usize, fps: f64) -> Result<Self, String> {
+        Self::start_with(path, width, height, fps, InputFormat::Rgba)
+    }
+
+    pub fn start_nv12(path: &Path, width: usize, height: usize, fps: f64) -> Result<Self, String> {
+        Self::start_with(path, width, height, fps, InputFormat::Nv12)
+    }
+
+    fn start_with(
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        format: InputFormat,
+    ) -> Result<Self, String> {
         if width == 0 || height == 0 {
             return Err("录制需要有效的画面尺寸".to_string());
         }
@@ -33,10 +56,18 @@ impl Recorder {
         } else {
             30.0
         };
+        let pix_fmt = match format {
+            InputFormat::Rgba => "rgba",
+            InputFormat::Nv12 => "nv12",
+        };
+        let frame_bytes = match format {
+            InputFormat::Rgba => width * height * 4,
+            InputFormat::Nv12 => width * height + width.div_ceil(2) * 2 * height.div_ceil(2),
+        };
         let mut command = Command::new("ffmpeg");
         command
             .args(["-hide_banner", "-loglevel", "error", "-y"])
-            .args(["-f", "rawvideo", "-pix_fmt", "rgba"])
+            .args(["-f", "rawvideo", "-pix_fmt", pix_fmt])
             .args(["-s", &format!("{width}x{height}")])
             .args(["-framerate", &format!("{fps:.3}")])
             .args(["-i", "pipe:0", "-an"])
@@ -90,19 +121,40 @@ impl Recorder {
             path: path.to_path_buf(),
             frames,
             dropped,
-            frame_bytes: width * height * 4,
+            format,
+            width,
+            height,
+            frame_bytes,
         })
     }
 
     pub fn push(&self, rgba: &[u8]) {
-        if rgba.len() != self.frame_bytes {
+        if self.format != InputFormat::Rgba || rgba.len() != self.frame_bytes {
             self.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         }
+        self.enqueue(rgba.to_vec());
+    }
+
+    pub fn push_nv12(&self, y: &[u8], y_stride: usize, uv: &[u8], uv_stride: usize) {
+        if self.format != InputFormat::Nv12 {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let Some(buffer) =
+            crate::snapshot::pack_nv12(self.width, self.height, y, y_stride, uv, uv_stride)
+        else {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        };
+        self.enqueue(buffer);
+    }
+
+    fn enqueue(&self, buffer: Vec<u8>) {
         let Some(tx) = self.tx.as_ref() else {
             return;
         };
-        match tx.try_send(rgba.to_vec()) {
+        match tx.try_send(buffer) {
             Ok(()) => {}
             Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {
                 self.dropped.fetch_add(1, Ordering::Relaxed);
@@ -163,6 +215,32 @@ mod tests {
         let frame = vec![128u8; 64 * 64 * 4];
         for _ in 0..30 {
             recorder.push(&frame);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let summary = recorder.stop().expect("完成录制");
+        let size = std::fs::metadata(&summary.path)
+            .expect("录制文件存在")
+            .len();
+        assert!(size > 0);
+        assert!(summary.frames > 0);
+        assert_eq!(summary.frames + summary.dropped, 30);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn records_nv12_frames_to_mp4() {
+        if !ffmpeg_available() {
+            eprintln!("跳过：系统 PATH 中没有 ffmpeg");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("flint-rec-nv12-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("out.mp4");
+        let recorder = Recorder::start_nv12(&path, 64, 64, 30.0).expect("启动录制");
+        let y = vec![128u8; 64 * 64];
+        let uv = vec![128u8; 64 * 32];
+        for _ in 0..30 {
+            recorder.push_nv12(&y, 64, &uv, 64);
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         let summary = recorder.stop().expect("完成录制");

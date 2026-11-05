@@ -9,6 +9,7 @@ pub mod embedded_subtitles;
 pub mod latest_slot;
 pub mod panorama;
 pub mod recorder;
+pub mod snapshot;
 pub mod stereo;
 pub mod subtitles;
 
@@ -104,6 +105,7 @@ pub struct CaptureSettings {
     pub input_format: Option<String>,
     pub pixel_format: Option<String>,
     pub smoothing: CaptureSmoothing,
+    pub yuv_output: bool,
 }
 
 impl Default for CaptureSettings {
@@ -116,6 +118,7 @@ impl Default for CaptureSettings {
             input_format: None,
             pixel_format: None,
             smoothing: CaptureSmoothing::default(),
+            yuv_output: true,
         }
     }
 }
@@ -547,6 +550,21 @@ impl Shared {
         Ok(())
     }
 
+    pub fn start_recording_nv12(
+        &self,
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+    ) -> Result<(), String> {
+        let mut slot = self.recorder.lock();
+        if slot.is_some() {
+            return Err("当前面板已经在录制".to_string());
+        }
+        *slot = Some(recorder::Recorder::start_nv12(path, width, height, fps)?);
+        Ok(())
+    }
+
     pub fn stop_recording(&self) -> Option<Result<RecordSummary, String>> {
         self.recorder.lock().take().map(|recorder| recorder.stop())
     }
@@ -608,9 +626,11 @@ impl Shared {
     }
 
     pub fn publish_frame(&self, frame: Frame) -> Option<Vec<u8>> {
-        if !frame.rgba.is_empty() {
-            if let Some(recorder) = self.recorder.lock().as_ref() {
+        if let Some(recorder) = self.recorder.lock().as_ref() {
+            if !frame.rgba.is_empty() {
                 recorder.push(&frame.rgba);
+            } else if let Some(planes) = frame.nv12.as_ref() {
+                recorder.push_nv12(&planes.y, planes.y_stride, &planes.uv, planes.uv_stride);
             }
         }
         *self.last_pts.lock() = frame.pts;
@@ -737,14 +757,15 @@ impl CaptureEngine {
             .status()
             .info
             .ok_or_else(|| MediaError::from("当前没有正在运行的画面".to_string()))?;
-        self.shared
-            .start_recording(
-                path,
-                info.width as usize,
-                info.height as usize,
-                info.nominal_fps,
-            )
-            .map_err(MediaError::from)
+        let width = info.width as usize;
+        let height = info.height as usize;
+        let fps = info.nominal_fps;
+        if self.shared.yuv_output() {
+            self.shared.start_recording_nv12(path, width, height, fps)
+        } else {
+            self.shared.start_recording(path, width, height, fps)
+        }
+        .map_err(MediaError::from)
     }
 
     pub fn stop_recording(&self) -> Option<Result<RecordSummary, String>> {

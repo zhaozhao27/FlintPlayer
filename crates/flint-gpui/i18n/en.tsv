@@ -493,7 +493,7 @@ BDA(HDTV) 设备	BDA (HDTV) device
 Copyright © 2026 FlintPlayer Project. 保留所有权利。	Copyright © 2026 FlintPlayer Project. All rights reserved.
 DVD/蓝光碟	DVD/Blu-ray
 FFmpeg 遵循 LGPL/GPL 许可协议；Slint 遵循 GPL/商业许可。	FFmpeg is licensed under LGPL/GPL; Slint is licensed under GPL or commercial terms.
-Linux 上的 PotPlayer 风格媒体播放器	A PotPlayer-style media player for Linux
+Linux 上的高性能媒体播放器	A high-performance media player for Linux
 上级	Up
 不透明度作用于弹出菜单与子菜单；皮肤文件放在皮肤目录，或用“浏览...”载入。	Opacity applies to popup menus and submenus; place skin files in the skin directory, or load one with "Browse...".
 中	Medium
@@ -557,6 +557,7 @@ Linux 上的 PotPlayer 风格媒体播放器	A PotPlayer-style media player for 
 显示 1# 截屏器	Show screenshot 1
 显示 2# 截屏器	Show screenshot 2
 暂不支持该 EPG。	This EPG is not supported yet.
+该设备类型尚不支持	This device type is not supported yet.
 更改会立即生效并保存到配置文件；字幕样式作用于已加载的字幕。	Changes take effect immediately and are saved to the config file; subtitle style applies to loaded subtitles.
 格式	Format
 格式:	Format:
@@ -1116,10 +1117,10 @@ AC3/DTS 直通到 S/PDIF/HDMI	Pass through AC3/DTS to S/PDIF/HDMI
 选择更改图像尺寸时使用的滤镜。因使用平滑滤镜会造成CPU负载过高，所以如非必要请勿使用。	Choose the filter used when the image size changes. Smoothing filters put a heavy load on the CPU, so avoid them unless needed.
 不使用平滑滤镜	Do not use smoothing
 使用系统默认平滑滤镜(慢)	Use system default smoothing (slow)
-使用 PotPlayer 低品质平滑滤镜	Use PotPlayer low-quality smoothing
-使用 PotPlayer 普通品质平滑滤镜	Use PotPlayer normal-quality smoothing
-使用 PotPlayer 适中品质平滑滤镜	Use PotPlayer medium-quality smoothing
-使用 PotPlayer 高品质平滑滤镜	Use PotPlayer high-quality smoothing
+使用 FlintPlayer 低品质平滑滤镜	Use FlintPlayer low-quality smoothing
+使用 FlintPlayer 普通品质平滑滤镜	Use FlintPlayer normal-quality smoothing
+使用 FlintPlayer 适中品质平滑滤镜	Use FlintPlayer medium-quality smoothing
+使用 FlintPlayer 高品质平滑滤镜	Use FlintPlayer high-quality smoothing
 已设置 A 点：{position:.2} 秒	A point set: {position:.2} s
 已设置 B 点：{position:.2} 秒	B point set: {position:.2} s
 已复制：{text}	Copied: {text}

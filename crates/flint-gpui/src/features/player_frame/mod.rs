@@ -1,4 +1,5 @@
 pub mod control_bar;
+pub mod control_window;
 pub mod controller;
 mod osd;
 pub mod view;

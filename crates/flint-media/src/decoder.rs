@@ -770,12 +770,7 @@ impl Converter {
                 .unwrap_or("unknown");
             shared.note_pixel_format(name);
         }
-        if shared.yuv_output()
-            && !shared.is_recording()
-            && !self.yuv_unsupported
-            && width % 2 == 0
-            && height % 2 == 0
-        {
+        if shared.yuv_output() && !self.yuv_unsupported && width % 2 == 0 && height % 2 == 0 {
             match self.convert_nv12(frame, shared, captured_at, pts) {
                 Ok(()) => return Ok(()),
                 Err(error) => {
