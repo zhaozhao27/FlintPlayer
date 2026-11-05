@@ -18,6 +18,7 @@ pub enum DropdownKind {
     Screen,
     Output,
     Smoothing,
+    Audio,
 }
 
 pub const SMOOTHING_OPTIONS: [(&str, &str); 6] = [
@@ -33,6 +34,45 @@ pub const OUTPUT_OPTIONS: [(&str, &str); 2] = [
     ("default", "默认输出"),
     ("rgba", "软件 RGBA 输出"),
 ];
+
+#[derive(Clone)]
+pub struct AudioSource {
+    pub name: String,
+    pub label: String,
+}
+
+fn audio_sources() -> Vec<AudioSource> {
+    let Ok(output) = std::process::Command::new("pactl")
+        .args(["list", "sources"])
+        .env("LC_ALL", "C")
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let mut sources: Vec<AudioSource> = Vec::new();
+    let mut name: Option<String> = None;
+    let mut label: Option<String> = None;
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if line.starts_with("Source #") {
+            if let Some(name) = name.take() {
+                let label = label.take().unwrap_or_else(|| name.clone());
+                sources.push(AudioSource { name, label });
+            }
+        } else if let Some(value) = line.strip_prefix("\tName: ") {
+            name = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("\tDescription: ") {
+            label = Some(value.trim().to_string());
+        }
+    }
+    if let Some(name) = name {
+        let label = label.unwrap_or_else(|| name.clone());
+        sources.push(AudioSource { name, label });
+    }
+    sources
+}
 
 #[derive(Clone)]
 pub struct ScreenSource {
@@ -87,6 +127,8 @@ pub struct SettingsController {
     screen_index: usize,
     output_index: usize,
     smoothing_key: String,
+    audio_sources: Vec<AudioSource>,
+    audio_selection: String,
     time_positioning: bool,
     audio_monitor: bool,
     manual_device: Option<String>,
@@ -125,6 +167,8 @@ impl SettingsController {
             screen_index: 0,
             output_index: 0,
             smoothing_key: "system".to_string(),
+            audio_sources: Vec::new(),
+            audio_selection: String::new(),
             time_positioning: false,
             audio_monitor: true,
             manual_device: None,
@@ -225,6 +269,68 @@ impl SettingsController {
         self.output_index = index.min(OUTPUT_OPTIONS.len() - 1);
         self.dropdown = None;
         cx.notify();
+    }
+
+    pub fn audio_label(&self) -> String {
+        let selection = self.audio_selection.trim();
+        if selection.is_empty() {
+            return crate::i18n::tr("默认音频");
+        }
+        self.audio_sources
+            .iter()
+            .find(|source| source.name == selection)
+            .map(|source| source.label.clone())
+            .unwrap_or_else(|| selection.to_string())
+    }
+
+    pub fn audio_names(&self) -> Vec<String> {
+        let mut names = vec![crate::i18n::tr("默认音频")];
+        names.extend(self.audio_sources.iter().map(|source| source.label.clone()));
+        names
+    }
+
+    pub fn audio_index(&self) -> usize {
+        let selection = self.audio_selection.trim();
+        if selection.is_empty() {
+            return 0;
+        }
+        self.audio_sources
+            .iter()
+            .position(|source| source.name == selection)
+            .map(|index| index + 1)
+            .unwrap_or(0)
+    }
+
+    pub fn audio_source(&self) -> Option<String> {
+        if self.audio_sources.is_empty() {
+            return None;
+        }
+        let selection = self.audio_selection.trim();
+        if self
+            .audio_sources
+            .iter()
+            .any(|source| source.name == selection)
+        {
+            Some(selection.to_string())
+        } else {
+            Some("default".to_string())
+        }
+    }
+
+    pub fn set_audio_source(&mut self, source: String) {
+        self.audio_selection = source;
+    }
+
+    pub fn select_audio(&mut self, index: usize, cx: &mut Context<Self>) -> Option<String> {
+        let selection = if index == 0 {
+            String::new()
+        } else {
+            self.audio_sources.get(index - 1)?.name.clone()
+        };
+        self.audio_selection = selection.clone();
+        self.dropdown = None;
+        cx.notify();
+        Some(selection)
     }
 
     pub fn smoothing_key(&self) -> &str {
@@ -341,6 +447,7 @@ impl SettingsController {
         self.screen_index = self.screen_index.min(self.screen_sources.len().saturating_sub(1));
         self.apply_screen_size();
         self.devices = device::scan_devices();
+        self.audio_sources = audio_sources();
         self.open = true;
         self.dropdown = None;
         if self.device_index.map_or(true, |index| index >= self.devices.len()) {

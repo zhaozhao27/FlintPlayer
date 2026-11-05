@@ -152,11 +152,9 @@ pub fn control_bar(
 
     let mut seek_area = div()
         .id("control-seek")
-        .absolute()
-        .left(px(8.0))
-        .top_0()
+        .relative()
         .w(px(seek_width))
-        .h(px(20.0))
+        .h_full()
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, event: &MouseDownEvent, _, cx| {
@@ -166,7 +164,7 @@ pub fn control_bar(
             }),
         )
         .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
-            if event.pressed_button != Some(MouseButton::Left) {
+            if this.volume_drag.get() || event.pressed_button != Some(MouseButton::Left) {
                 return;
             }
             let fraction = seek_fraction(event.position, seek_move_bounds.get());
@@ -232,10 +230,18 @@ pub fn control_bar(
             .bg(rgb(theme::BAR_THUMB)),
     );
 
-    let mute_icon = div()
-        .absolute()
-        .right(px(63.0))
-        .top(px(4.0))
+    let mute_area = div()
+        .id("control-mute")
+        .w(px(20.0))
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.playback
+                .update(cx, |playback, cx| playback.toggle_mute(cx));
+        }))
         .child(icon(
             if muted {
                 icons::VOLUME_MUTED
@@ -246,32 +252,19 @@ pub fn control_bar(
             theme::CONTROL_BAR_TEXT,
         ));
 
-    let mute_area = div()
-        .id("control-mute")
-        .absolute()
-        .right_0()
-        .top_0()
-        .w(px(76.0))
-        .h(px(20.0))
-        .on_click(cx.listener(|this, _, _, cx| {
-            this.playback
-                .update(cx, |playback, cx| playback.toggle_mute(cx));
-        }));
-
     let volume_bounds: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
     let volume_down_bounds = volume_bounds.clone();
-    let volume_move_bounds = volume_bounds.clone();
 
     let volume_area = div()
         .id("control-volume")
-        .absolute()
-        .right(px(8.0))
-        .top_0()
+        .cursor_pointer()
+        .relative()
         .w(px(48.0))
-        .h(px(20.0))
+        .h_full()
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                this.volume_drag.set(true);
                 if let Some(fraction) = pointer_fraction(event.position, volume_down_bounds.get()) {
                     this.playback.update(cx, |playback, cx| {
                         playback.set_volume(fraction as f64 * 100.0, cx)
@@ -279,19 +272,12 @@ pub fn control_bar(
                 }
             }),
         )
-        .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
-            if event.pressed_button != Some(MouseButton::Left) {
-                return;
-            }
-            if let Some(fraction) = pointer_fraction(event.position, volume_move_bounds.get()) {
-                this.playback.update(cx, |playback, cx| {
-                    playback.set_volume(fraction as f64 * 100.0, cx)
-                });
-            }
-        }))
         .child(
             canvas(
-                move |bounds, _, _| volume_bounds.set(bounds),
+                {
+                    let tracked = volume_bounds.clone();
+                    move |bounds, _, _| tracked.set(bounds)
+                },
                 |_, _, _, _| {},
             )
             .size_full(),
@@ -462,6 +448,64 @@ pub fn control_bar(
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(cx))),
         );
 
+    let top_row = div()
+        .absolute()
+        .left_0()
+        .top_0()
+        .w_full()
+        .h(px(20.0))
+        .flex()
+        .items_center()
+        .child(div().w(px(8.0)).flex_shrink_0())
+        .child(seek_area)
+        .child(div().w(px(4.0)).flex_shrink_0())
+        .child(mute_area)
+        .child(div().w(px(4.0)).flex_shrink_0())
+        .child(volume_area)
+        .child(div().w(px(12.0)).flex_shrink_0());
+
+    let volume_drag_listener = {
+        let bounds = volume_bounds.clone();
+        let active = frame.volume_drag.clone();
+        let target = cx.entity().downgrade();
+        div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .w_full()
+            .h(px(20.0))
+            .child(canvas(
+                |_, _, _| {},
+                move |_, _, window, _| {
+                    let bounds = bounds.clone();
+                    let active = active.clone();
+                    let target = target.clone();
+                    let released = active.clone();
+                    window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
+                        if phase != DispatchPhase::Bubble || !active.get() {
+                            return;
+                        }
+                        if event.pressed_button != Some(MouseButton::Left) {
+                            active.set(false);
+                            return;
+                        }
+                        if let Some(fraction) = pointer_fraction(event.position, bounds.get()) {
+                            let _ = target.update(cx, |this, cx| {
+                                this.playback.update(cx, |playback, cx| {
+                                    playback.set_volume(fraction as f64 * 100.0, cx)
+                                });
+                            });
+                        }
+                    });
+                    window.on_mouse_event(move |_: &MouseUpEvent, phase, _window, _cx| {
+                        if phase == DispatchPhase::Bubble {
+                            released.set(false);
+                        }
+                    });
+                },
+            ))
+    };
+
     div()
         .relative()
         .h(px(theme::CONTROL_BAR_HEIGHT))
@@ -477,10 +521,8 @@ pub fn control_bar(
                 .h(px(1.0))
                 .bg(rgb(theme::BAR_BORDER)),
         )
-        .child(seek_area)
-        .child(mute_icon)
-        .child(mute_area)
-        .child(volume_area)
+        .child(top_row)
+        .child(volume_drag_listener)
         .child(row)
         .into_any_element()
 }

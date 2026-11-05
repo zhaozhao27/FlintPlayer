@@ -17,6 +17,10 @@ actions!(flint_player, [ToggleOsd, ToggleOsdBrief]);
 
 pub const PLAYER_KEY_CONTEXT: &str = "FlintPlayer";
 
+const NOTICE_HOLD: Duration = Duration::from_millis(700);
+const NOTICE_FADE_STEPS: u32 = 6;
+const NOTICE_FADE_STEP: Duration = Duration::from_millis(50);
+
 const EQ_FREQUENCIES: [u32; 10] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
 const EQ_PRESETS: [(&str, [i16; 10]); 5] = [
@@ -138,6 +142,9 @@ pub struct PlayerFrameController {
     open_path: Vec<usize>,
     menu_anchor: Option<(f32, f32)>,
     notice: Option<String>,
+    notice_serial: u64,
+    notice_opacity: f32,
+    pub(crate) volume_drag: std::rc::Rc<std::cell::Cell<bool>>,
     focus_handle: FocusHandle,
     repeat: bool,
     shuffle: bool,
@@ -234,6 +241,9 @@ impl PlayerFrameController {
             open_path: Vec::new(),
             menu_anchor: None,
             notice: None,
+            notice_serial: 0,
+            notice_opacity: 1.0,
+            volume_drag: std::rc::Rc::new(std::cell::Cell::new(false)),
             focus_handle: cx.focus_handle(),
             repeat: false,
             shuffle: false,
@@ -288,10 +298,12 @@ impl PlayerFrameController {
         let (width, height) = (self.config.screen1_width, self.config.screen1_height);
         let fps = self.config.fps;
         let smoothing = self.config.capture_smoothing.clone();
+        let audio_source = self.config.capture_audio_source.clone();
         let active = self.capture.read(cx).source().map(str::to_string);
         self.settings.update(cx, |settings, cx| {
             settings.set_capture_size(width, height, fps);
             settings.set_smoothing_key(smoothing);
+            settings.set_audio_source(audio_source);
             settings.set_active_source(active);
             settings.open(tab, cx);
         });
@@ -1592,7 +1604,11 @@ impl PlayerFrameController {
             .map(|elapsed| elapsed.as_millis())
             .unwrap_or(0);
         let path = directory.join(format!("flintplayer_{millis}.mp4"));
-        let result = self.capture.read(cx).start_recording(&path);
+        let audio = self.settings.read(cx).audio_source();
+        let result = self
+            .capture
+            .read(cx)
+            .start_recording_with_audio(&path, audio.as_deref());
         match result {
             Ok(()) => self.show_notice(crate::i18n::trf("开始录制：{}", &[&path.display()]), cx),
             Err(error) => self.show_notice(crate::i18n::trf("无法录制：{error}", &[&error]), cx),
@@ -1828,6 +1844,16 @@ impl PlayerFrameController {
             .map(|(_, label)| crate::i18n::tr(label))
             .unwrap_or_default();
         let prefix = crate::i18n::tr("平滑滤镜");
+        self.show_notice(crate::i18n::trf("{prefix}: {choice}", &[&prefix, &label]), cx);
+    }
+
+    pub(crate) fn apply_capture_audio(&mut self, source: String, cx: &mut Context<Self>) {
+        self.config.capture_audio_source = source.clone();
+        self.save_config();
+        let label = self.settings.read(cx).audio_label();
+        self.settings
+            .update(cx, |settings, _| settings.set_audio_source(source));
+        let prefix = crate::i18n::tr("音频输入");
         self.show_notice(crate::i18n::trf("{prefix}: {choice}", &[&prefix, &label]), cx);
     }
 
@@ -3092,7 +3118,43 @@ impl PlayerFrameController {
 
     pub fn show_notice(&mut self, notice: impl Into<String>, cx: &mut Context<Self>) {
         self.notice = Some(notice.into());
-        cx.notify();
+        self.notice_opacity = 1.0;
+        self.notice_serial = self.notice_serial.wrapping_add(1);
+        let serial = self.notice_serial;
+        let this = cx.entity().downgrade();
+        cx.spawn(async move |_, cx| {
+            cx.background_executor()
+                .timer(NOTICE_HOLD)
+                .await;
+            for step in 1..=NOTICE_FADE_STEPS {
+                let alive = this
+                    .update(cx, |this, cx| {
+                        if this.notice_serial != serial {
+                            return false;
+                        }
+                        this.notice_opacity = 1.0 - step as f32 / NOTICE_FADE_STEPS as f32;
+                        cx.notify();
+                        true
+                    })
+                    .unwrap_or(false);
+                if !alive {
+                    return;
+                }
+                cx.background_executor().timer(NOTICE_FADE_STEP).await;
+            }
+            let _ = this.update(cx, |this, cx| {
+                if this.notice_serial == serial {
+                    this.notice = None;
+                    this.notice_opacity = 1.0;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub fn notice_opacity(&self) -> f32 {
+        self.notice_opacity
     }
 
     pub fn osd_mode(&self) -> Option<OsdMode> {

@@ -10,6 +10,7 @@ pub struct Config {
     pub resume: Vec<(String, f64)>,
     pub capture_selections: Vec<(String, String, u32, u32)>,
     pub capture_smoothing: String,
+    pub capture_audio_source: String,
     pub remember_position: bool,
     pub show_markers: bool,
     pub seek_step_seconds: f64,
@@ -153,6 +154,7 @@ impl Default for Config {
             resume: Vec::new(),
             capture_selections: Vec::new(),
             capture_smoothing: "system".into(),
+            capture_audio_source: String::new(),
             remember_position: true,
             show_markers: true,
             seek_step_seconds: 5.0,
@@ -367,6 +369,7 @@ impl Config {
                         cfg.capture_smoothing = value.to_string();
                     }
                 }
+                "capture_audio_source" => cfg.capture_audio_source = value.trim().to_string(),
                 "remember_position" => cfg.remember_position = value == "true" || value == "1",
                 "show_markers" => cfg.show_markers = value == "true" || value == "1",
                 "seek_step_seconds" => {
@@ -730,6 +733,12 @@ impl Config {
                 _ => {}
             }
         }
+        if !cfg.remember_frame {
+            cfg.frame_scale_x = 100;
+            cfg.frame_scale_y = 100;
+            cfg.frame_shift_x = 0;
+            cfg.frame_shift_y = 0;
+        }
         cfg
     }
 
@@ -751,6 +760,7 @@ impl Config {
              resume={}\n\
              capture_selections={}\n\
              capture_smoothing={}\n\
+             capture_audio_source={}\n\
              remember_position={}\n\
              show_markers={}\n\
              seek_step_seconds={}\n\
@@ -910,6 +920,7 @@ impl Config {
             )),
             sanitize(&encode_capture_selections(&self.capture_selections)),
             sanitize(&self.capture_smoothing),
+            sanitize(&self.capture_audio_source),
             self.remember_position,
             self.show_markers,
             self.seek_step_seconds,
@@ -1183,9 +1194,19 @@ mod tests {
             ),
             (150, 120, -5, 7)
         );
-        let clamped = Config::parse("frame_scale_x=9999\nframe_shift_y=-999\n");
+        let clamped = Config::parse("remember_frame=true\nframe_scale_x=9999\nframe_shift_y=-999\n");
         assert_eq!(clamped.frame_scale_x, 400);
         assert_eq!(clamped.frame_shift_y, -50);
+        let unremembered = Config::parse("frame_scale_x=150\nframe_scale_y=120\nframe_shift_x=-5\nframe_shift_y=7\n");
+        assert_eq!(
+            (
+                unremembered.frame_scale_x,
+                unremembered.frame_scale_y,
+                unremembered.frame_shift_x,
+                unremembered.frame_shift_y
+            ),
+            (100, 100, 0, 0)
+        );
     }
 
     #[test]
@@ -1412,6 +1433,27 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert!(saved.contains("capture_smoothing=medium\n"));
         assert_eq!(Config::parse(&saved).capture_smoothing, "medium");
+    }
+
+    #[test]
+    fn round_trips_capture_audio_source() {
+        let parsed = Config::parse("capture_audio_source=alsa_input.mic\n");
+        assert_eq!(parsed.capture_audio_source, "alsa_input.mic");
+        assert_eq!(Config::parse("").capture_audio_source, "");
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-audio-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            capture_audio_source: "alsa_input.mic".into(),
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("capture_audio_source=alsa_input.mic\n"));
+        assert_eq!(Config::parse(&saved).capture_audio_source, "alsa_input.mic");
     }
 
     #[test]

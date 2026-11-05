@@ -297,6 +297,18 @@ impl CaptureController {
             .map_err(|error| error.to_string())
     }
 
+    pub fn start_recording_with_audio(
+        &self,
+        path: &Path,
+        audio: Option<&str>,
+    ) -> Result<(), String> {
+        self.engine
+            .as_ref()
+            .ok_or_else(|| "当前没有可录制的画面".to_string())?
+            .start_recording_with_audio(path, audio)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn stop_recording(&self) -> Option<Result<RecordSummary, String>> {
         self.engine.as_ref().and_then(|engine| engine.stop_recording())
     }

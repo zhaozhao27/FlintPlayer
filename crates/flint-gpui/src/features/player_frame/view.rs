@@ -251,8 +251,18 @@ impl PlayerFrameController {
 
     fn menu_level_left(&self, level: usize, max_right: f32) -> f32 {
         let base = self.menu_anchor().map(|(x, _)| x).unwrap_or(8.0);
-        let left = base + level as f32 * PANEL_WIDTH;
-        left.min((max_right - PANEL_WIDTH - 8.0).max(8.0))
+        let natural = base + level as f32 * PANEL_WIDTH;
+        let limit = (max_right - PANEL_WIDTH - 8.0).max(8.0);
+        if natural <= limit {
+            return natural;
+        }
+        if level > 0 {
+            let flipped = self.menu_level_left(level - 1, max_right) - PANEL_WIDTH;
+            if flipped >= 8.0 {
+                return flipped;
+            }
+        }
+        limit
     }
 
     fn menu_level_top(&self, level: usize, max_bottom: f32) -> f32 {
@@ -261,11 +271,15 @@ impl PlayerFrameController {
             .map(|(_, y)| y.max(theme::TITLEBAR_HEIGHT + PANEL_PADDING))
             .unwrap_or(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
         for depth in 0..level {
+            let entries = self.entries_at(depth);
+            let content = menu_panel_height(entries, theme::MENU_ROW_HEIGHT);
+            if (depth > 0 || self.menu_anchor().is_some()) && top + content > max_bottom {
+                top = (max_bottom - content).max(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
+            }
+            let row_height = menu_row_height(entries, (max_bottom - top).max(120.0));
             let Some(&index) = self.open_path().get(depth) else {
                 break;
             };
-            let entries = self.entries_at(depth);
-            let row_height = menu_row_height(entries, max_bottom - top);
             let mut offset = 0.0;
             for entry in entries.iter().take(index) {
                 offset += if entry.is_separator() {
@@ -384,6 +398,7 @@ impl PlayerFrameController {
                         .py(px(6.0))
                         .bg(rgb(theme::NOTICE_BG))
                         .text_color(rgb(theme::NOTICE_TEXT))
+                        .opacity(self.notice_opacity())
                         .child(crate::i18n::tr(notice)),
                 )
                 .into_any(),

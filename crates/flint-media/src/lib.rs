@@ -565,6 +565,42 @@ impl Shared {
         Ok(())
     }
 
+    pub fn start_recording_with_audio(
+        &self,
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        audio: Option<&str>,
+    ) -> Result<(), String> {
+        let mut slot = self.recorder.lock();
+        if slot.is_some() {
+            return Err("当前面板已经在录制".to_string());
+        }
+        *slot = Some(recorder::Recorder::start_with_audio(
+            path, width, height, fps, audio,
+        )?);
+        Ok(())
+    }
+
+    pub fn start_recording_nv12_with_audio(
+        &self,
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        audio: Option<&str>,
+    ) -> Result<(), String> {
+        let mut slot = self.recorder.lock();
+        if slot.is_some() {
+            return Err("当前面板已经在录制".to_string());
+        }
+        *slot = Some(recorder::Recorder::start_nv12_with_audio(
+            path, width, height, fps, audio,
+        )?);
+        Ok(())
+    }
+
     pub fn stop_recording(&self) -> Option<Result<RecordSummary, String>> {
         self.recorder.lock().take().map(|recorder| recorder.stop())
     }
@@ -764,6 +800,29 @@ impl CaptureEngine {
             self.shared.start_recording_nv12(path, width, height, fps)
         } else {
             self.shared.start_recording(path, width, height, fps)
+        }
+        .map_err(MediaError::from)
+    }
+
+    pub fn start_recording_with_audio(
+        &self,
+        path: &Path,
+        audio: Option<&str>,
+    ) -> Result<(), MediaError> {
+        let info = self
+            .shared
+            .status()
+            .info
+            .ok_or_else(|| MediaError::from("当前没有正在运行的画面".to_string()))?;
+        let width = info.width as usize;
+        let height = info.height as usize;
+        let fps = info.nominal_fps;
+        if self.shared.yuv_output() {
+            self.shared
+                .start_recording_nv12_with_audio(path, width, height, fps, audio)
+        } else {
+            self.shared
+                .start_recording_with_audio(path, width, height, fps, audio)
         }
         .map_err(MediaError::from)
     }

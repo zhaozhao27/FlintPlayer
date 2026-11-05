@@ -96,10 +96,19 @@ pub fn settings_overlay(
         let controller = settings.read(cx);
         controller.capture_size()
     };
-    let (output_label, time_positioning, audio_monitor, manual_device, split_enabled, split_available) = {
+    let (
+        output_label,
+        audio_label,
+        time_positioning,
+        audio_monitor,
+        manual_device,
+        split_enabled,
+        split_available,
+    ) = {
         let controller = settings.read(cx);
         (
             controller.output_label(),
+            controller.audio_label(),
             controller.time_positioning(),
             controller.audio_monitor(),
             controller.manual_device().map(str::to_string),
@@ -241,6 +250,7 @@ pub fn settings_overlay(
             &format_label,
             format_index.is_none(),
             &output_label,
+            &audio_label,
             time_positioning,
             audio_monitor,
             split_enabled,
@@ -344,6 +354,7 @@ pub fn settings_overlay(
             )
         }
         Some(DropdownKind::Smoothing) if tab == 0 => Some(smoothing_popup(settings, cx)),
+        Some(DropdownKind::Audio) if tab == 1 => Some(audio_popup(settings, cx)),
         _ => None,
     };
 
@@ -509,6 +520,7 @@ fn camera_tab(
     format_label: &str,
     format_placeholder: bool,
     output_label: &str,
+    audio_label: &str,
     time_positioning: bool,
     audio_monitor: bool,
     split_enabled: bool,
@@ -558,6 +570,16 @@ fn camera_tab(
                 });
             }
         });
+    let audio_dropdown = dropdown_box(100.0, 86.0, 160.0, audio_label, false, true)
+        .id("settings-audio-dropdown")
+        .on_click({
+            let settings = settings.clone();
+            move |_, _, cx: &mut App| {
+                settings.update(cx, |settings, cx| {
+                    settings.toggle_dropdown(DropdownKind::Audio, cx)
+                });
+            }
+        });
 
     let audio_device = tr("PulseAudio - 默认设备");
     let mut video_group = group(8.0, 8.0, 644.0, 150.0, "视频录制设备");
@@ -573,7 +595,7 @@ fn camera_tab(
         .child(field_label(276.0, 58.0, 48.0, "格式："))
         .child(format_dropdown)
         .child(field_label(14.0, 86.0, 82.0, "音频："))
-        .child(combo(100.0, 86.0, 160.0, &tr("默认音频"), "", true))
+        .child(audio_dropdown)
         .child(dlg_button(
             "settings-camera-refresh",
             270.0,
@@ -846,7 +868,7 @@ fn dropdown_popup(
                             DropdownKind::Format => settings.select_mode(index, cx),
                             DropdownKind::Screen => settings.select_screen(index, cx),
                             DropdownKind::Output => settings.select_output(index, cx),
-                            DropdownKind::Smoothing => {}
+                            DropdownKind::Smoothing | DropdownKind::Audio => {}
                         });
                     }
                 })
@@ -860,6 +882,67 @@ fn dropdown_popup(
         .w(px(width))
         .h(px(full_height.min(360.0)))
         .id("settings-dropdown-popup")
+        .occlude()
+        .overflow_y_scroll()
+        .bg(rgb(CONTROL_BG))
+        .border_1()
+        .border_color(rgb(BUTTON_BORDER))
+        .child(inner)
+        .into_any_element()
+}
+
+fn audio_popup(
+    settings: &Entity<SettingsController>,
+    cx: &mut Context<PlayerFrameController>,
+) -> AnyElement {
+    const WIDTH: f32 = 340.0;
+    let (names, current) = {
+        let controller = settings.read(cx);
+        (controller.audio_names(), controller.audio_index())
+    };
+    let full_height = names.len() as f32 * 20.0 + 2.0;
+    let mut inner = div().relative().w_full().h(px(full_height));
+    for (index, name) in names.iter().enumerate() {
+        let selected = index == current;
+        inner = inner.child(
+            div()
+                .id(("settings-audio-option", index))
+                .absolute()
+                .left(px(1.0))
+                .top(px(index as f32 * 20.0 + 1.0))
+                .w(px(WIDTH - 2.0))
+                .h(px(20.0))
+                .flex()
+                .items_center()
+                .px(px(6.0))
+                .truncate()
+                .text_size(px(11.0))
+                .text_color(rgb(CONTROL_TEXT))
+                .bg(rgb(if selected { 0xdce9f7 } else { CONTROL_BG }))
+                .hover(|style| {
+                    style
+                        .bg(rgb(OPTION_HOVER))
+                        .text_color(rgb(0xffffff))
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let source =
+                        this.settings
+                            .update(cx, |settings, cx| settings.select_audio(index, cx));
+                    if let Some(source) = source {
+                        this.apply_capture_audio(source, cx);
+                    }
+                }))
+                .child(name.clone()),
+        );
+    }
+    div()
+        .absolute()
+        .left(px(108.0))
+        .top(px(114.0))
+        .w(px(WIDTH))
+        .h(px(full_height.min(360.0)))
+        .id("settings-audio-popup")
+        .occlude()
         .overflow_y_scroll()
         .bg(rgb(CONTROL_BG))
         .border_1()
@@ -918,6 +1001,7 @@ fn smoothing_popup(
         .top(px(199.0))
         .w(px(WIDTH))
         .id("settings-smoothing-popup")
+        .occlude()
         .bg(rgb(CONTROL_BG))
         .border_1()
         .border_color(rgb(BUTTON_BORDER))

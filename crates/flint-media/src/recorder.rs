@@ -34,11 +34,31 @@ pub struct Recorder {
 
 impl Recorder {
     pub fn start(path: &Path, width: usize, height: usize, fps: f64) -> Result<Self, String> {
-        Self::start_with(path, width, height, fps, InputFormat::Rgba)
+        Self::start_with(path, width, height, fps, InputFormat::Rgba, None)
     }
 
     pub fn start_nv12(path: &Path, width: usize, height: usize, fps: f64) -> Result<Self, String> {
-        Self::start_with(path, width, height, fps, InputFormat::Nv12)
+        Self::start_with(path, width, height, fps, InputFormat::Nv12, None)
+    }
+
+    pub fn start_with_audio(
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        audio: Option<&str>,
+    ) -> Result<Self, String> {
+        Self::start_with(path, width, height, fps, InputFormat::Rgba, audio)
+    }
+
+    pub fn start_nv12_with_audio(
+        path: &Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        audio: Option<&str>,
+    ) -> Result<Self, String> {
+        Self::start_with(path, width, height, fps, InputFormat::Nv12, audio)
     }
 
     fn start_with(
@@ -47,6 +67,7 @@ impl Recorder {
         height: usize,
         fps: f64,
         format: InputFormat,
+        audio: Option<&str>,
     ) -> Result<Self, String> {
         if width == 0 || height == 0 {
             return Err("录制需要有效的画面尺寸".to_string());
@@ -70,7 +91,20 @@ impl Recorder {
             .args(["-f", "rawvideo", "-pix_fmt", pix_fmt])
             .args(["-s", &format!("{width}x{height}")])
             .args(["-framerate", &format!("{fps:.3}")])
-            .args(["-i", "pipe:0", "-an"])
+            .args(["-i", "pipe:0"]);
+        match audio.filter(|source| !source.trim().is_empty()) {
+            Some(source) => {
+                command
+                    .args(["-thread_queue_size", "1024"])
+                    .args(["-f", "pulse", "-i", source])
+                    .args(["-c:a", "aac", "-b:a", "160k"])
+                    .arg("-shortest");
+            }
+            None => {
+                command.arg("-an");
+            }
+        }
+        command
             .args([
                 "-c:v",
                 "libx264",
