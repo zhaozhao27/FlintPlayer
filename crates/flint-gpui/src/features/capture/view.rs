@@ -39,7 +39,7 @@ pub fn video_canvas(
         .flex()
         .items_center()
         .justify_center()
-        .text_color(rgb(theme::TITLEBAR_TEXT_DIM))
+        .text_color(rgb(theme::titlebar_text_dim()))
         .child(message)
         .into_any_element()
 }

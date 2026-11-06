@@ -97,11 +97,19 @@ impl Map {
     }
 
     pub fn render(&self, frame: &Frame, out: &mut Vec<u8>) -> bool {
-        let (width, height) = (frame.width, frame.height);
+        self.render_source(frame.width, frame.height, &frame.rgba, out)
+    }
+
+    pub fn render_source(
+        &self,
+        width: usize,
+        height: usize,
+        source: &[u8],
+        out: &mut Vec<u8>,
+    ) -> bool {
         if width != self.width || height != self.height {
             return false;
         }
-        let source = &frame.rgba;
         if source.len() < width * height * 4 {
             return false;
         }

@@ -6,7 +6,6 @@ use flint_engine::{ChapterInfo, EngineError, MpvPlayer, PlayerState, TrackInfo};
 use flint_media::panorama;
 use flint_media::recorder::{RecordSummary, Recorder};
 use flint_media::stereo::{self, StereoMode};
-use flint_media::Frame;
 use gpui::*;
 
 #[derive(Clone, Debug, Default)]
@@ -39,6 +38,19 @@ pub struct PlaybackController {
     analysis: bool,
     frame_index: i64,
     audio_device: String,
+    pixel_shader: String,
+    ass_engine: String,
+    tone_mapping: String,
+    target_peak: u32,
+    hdr_tone_map: bool,
+    hdr_metadata: bool,
+    flip_filters: String,
+    vapoursynth: Option<String>,
+    applied_vf: String,
+    vf_dirty: bool,
+    shader_buf: Vec<u8>,
+    raw_frame: Vec<u8>,
+    shader_dirty: bool,
 }
 
 impl PlaybackController {
@@ -64,6 +76,121 @@ impl PlaybackController {
             analysis: false,
             frame_index: 0,
             audio_device: "auto".to_string(),
+            pixel_shader: String::new(),
+            ass_engine: "basic".to_string(),
+            tone_mapping: "auto".to_string(),
+            target_peak: 0,
+            hdr_tone_map: true,
+            hdr_metadata: true,
+            flip_filters: String::new(),
+            vapoursynth: None,
+            applied_vf: String::new(),
+            vf_dirty: false,
+            shader_buf: Vec::new(),
+            raw_frame: Vec::new(),
+            shader_dirty: false,
+        }
+    }
+
+    pub fn set_pixel_shader(&mut self, key: &str) {
+        if self.pixel_shader != key {
+            self.pixel_shader = key.to_string();
+            self.shader_dirty = true;
+        }
+    }
+
+    pub fn set_ass_engine(&mut self, key: &str) {
+        let key = crate::subtitle_engine::normalize(key);
+        if self.ass_engine == key {
+            return;
+        }
+        self.ass_engine = key.to_string();
+        if let Some(player) = self.player.as_ref() {
+            let _ = player.set_property("sub-ass-override", crate::subtitle_engine::mpv_value(key));
+        }
+    }
+
+    pub fn set_hdr_settings(
+        &mut self,
+        tone_mapping: &str,
+        target_peak: u32,
+        tone_map: bool,
+        metadata: bool,
+    ) {
+        self.tone_mapping = crate::hdr::normalize_curve(tone_mapping).to_string();
+        self.target_peak = target_peak;
+        self.hdr_tone_map = tone_map;
+        self.hdr_metadata = metadata;
+        self.vf_dirty = true;
+    }
+
+    pub fn set_flip_filters(&mut self, filters: &str) -> Result<(), String> {
+        if self.flip_filters == filters {
+            return Ok(());
+        }
+        self.flip_filters = filters.to_string();
+        self.vf_dirty = true;
+        if self.state.loaded {
+            self.apply_vf(true)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn set_vapoursynth(&mut self, script: Option<&str>) -> Result<(), String> {
+        let script = script.map(str::to_string);
+        if self.vapoursynth == script {
+            return Ok(());
+        }
+        self.vapoursynth = script;
+        self.vf_dirty = true;
+        if self.state.loaded {
+            self.apply_vf(true)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn desired_vf(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if !self.flip_filters.is_empty() {
+            parts.push(self.flip_filters.clone());
+        }
+        if let Some(script) = &self.vapoursynth {
+            parts.push(format!("vapoursynth={script}"));
+        }
+        if self.hdr_tone_map && crate::hdr::is_hdr(&self.state.video_gamma) {
+            parts.push(crate::hdr::filter_chain(
+                &self.tone_mapping,
+                self.target_peak,
+                self.hdr_metadata,
+            ));
+        }
+        parts.join(",")
+    }
+
+    fn apply_vf(&mut self, force: bool) -> Result<(), String> {
+        let desired = self.desired_vf();
+        if !force && !self.vf_dirty && desired == self.applied_vf {
+            return Ok(());
+        }
+        if desired.is_empty() && self.applied_vf.is_empty() && !self.vf_dirty {
+            return Ok(());
+        }
+        let Some(player) = self.player.as_ref() else {
+            return Ok(());
+        };
+        match player.set_property("vf", &desired) {
+            Ok(()) => {
+                self.applied_vf = desired;
+                self.vf_dirty = false;
+                Ok(())
+            }
+            Err(error) => {
+                let message = error.to_string();
+                self.error = Some(message.clone());
+                Err(message)
+            }
         }
     }
 
@@ -147,12 +274,17 @@ impl PlaybackController {
             }
         }
         self.frame_index = 0;
+        self.raw_frame.clear();
         let path = path.to_string_lossy();
         let analysis = self.analysis;
         let result = match self.player.as_ref() {
             Some(player) => apply_raw_input(player, self.raw_input.as_ref())
                 .and_then(|()| {
                     let _ = player.set_property("audio-device", &self.audio_device);
+                    let _ = player.set_property(
+                        "sub-ass-override",
+                        crate::subtitle_engine::mpv_value(&self.ass_engine),
+                    );
                     player.open(&path)
                 })
                 .and_then(|()| {
@@ -461,6 +593,9 @@ impl PlaybackController {
                 );
             }
             self.state = state;
+            if self.state.loaded {
+                let _ = self.apply_vf(false);
+            }
         }
     }
 
@@ -472,17 +607,38 @@ impl PlaybackController {
         let Some(player) = self.player.as_mut() else {
             return;
         };
-        let frame = match player.render_frame(width, height) {
-            Ok(Some(frame)) => frame,
-            Ok(None) => return,
+        let fresh = match player.render_frame(width, height) {
+            Ok(Some(frame)) => {
+                self.raw_frame = frame;
+                for pixel in self.raw_frame.chunks_exact_mut(4) {
+                    pixel[3] = 255;
+                }
+                true
+            }
+            Ok(None) => false,
             Err(error) => {
                 self.error = Some(error.to_string());
                 return;
             }
         };
-        let mut pixels = frame;
-        for pixel in pixels.chunks_exact_mut(4) {
-            pixel[3] = 255;
+        if !fresh && !self.shader_dirty {
+            return;
+        }
+        if self.raw_frame.len() < width as usize * height as usize * 4 {
+            return;
+        }
+        self.shader_dirty = false;
+        let mut source: &[u8] = &self.raw_frame;
+        if !self.pixel_shader.is_empty()
+            && crate::shaders::apply(
+                &self.pixel_shader,
+                width as usize,
+                height as usize,
+                source,
+                &mut self.shader_buf,
+            )
+        {
+            source = &self.shader_buf;
         }
         if let Some(view) = self.pano_view {
             let width_usize = width as usize;
@@ -495,23 +651,13 @@ impl PlaybackController {
                 self.pano_map = panorama::Map::build(width_usize, height_usize, view);
             }
             if let Some(map) = &self.pano_map {
-                let frame = Frame {
-                    width: width_usize,
-                    height: height_usize,
-                    rgba: pixels,
-                    nv12: None,
-                    pts: 0.0,
-                    captured_at: std::time::Instant::now(),
-                    serial: 0,
-                };
-                let rendered = map.render(&frame, &mut self.pano_buf);
-                pixels = frame.rgba;
-                if !rendered {
+                if map.render_source(width_usize, height_usize, source, &mut self.pano_buf) {
+                    source = &self.pano_buf;
+                } else {
                     log::debug!("全景渲染失败");
                 }
             }
         }
-        let mut source: &[u8] = &pixels;
         if stereo::transform_rgba(
             width as usize,
             height as usize,

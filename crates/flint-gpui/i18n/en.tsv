@@ -1177,3 +1177,7 @@ AC3/DTS 直通到 S/PDIF/HDMI	Pass through AC3/DTS to S/PDIF/HDMI
 已载入配置	Configuration loaded
 未打开媒体	No media opened
 拖入媒体文件即可播放	Drag media files here to play
+ASS/SSA 输出引擎：	ASS/SSA Output Engine:
+色调映射类型：	Tone Mapping Type:
+源峰值亮度(尼特)：	Source Peak Brightness (nits):
+按住鼠标键时	While Holding Mouse Button

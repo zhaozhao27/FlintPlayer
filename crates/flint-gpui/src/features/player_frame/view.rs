@@ -3,8 +3,8 @@ use gpui::*;
 use super::control_bar::control_bar;
 use super::osd;
 use super::controller::{
-    FrameAction, OsdMode, PLAYER_KEY_CONTEXT, PlayerFrameController, ToggleOsd, ToggleOsdBrief,
-    WindowCommand,
+    FrameAction, HoldButton, OsdMode, PLAYER_KEY_CONTEXT, PlayerFrameController, ToggleOsd,
+    ToggleOsdBrief, WindowCommand,
 };
 use crate::features::{capture, playback, settings};
 use crate::icons::{self, icon};
@@ -25,15 +25,15 @@ fn menu_row_height(entries: &[MenuEntry], available: f32) -> f32 {
     let rows = entries.iter().filter(|entry| !entry.is_separator()).count() as f32;
     let separators = entries.len() as f32 - rows;
     if rows == 0.0 {
-        return theme::MENU_ROW_HEIGHT;
+        return theme::menu_row_height();
     }
-    let needed = rows * theme::MENU_ROW_HEIGHT + separators * SEPARATOR_HEIGHT;
+    let needed = rows * theme::menu_row_height() + separators * SEPARATOR_HEIGHT;
     let space = (available - 2.0 * PANEL_PADDING).max(0.0);
     if needed <= space {
-        theme::MENU_ROW_HEIGHT
+        theme::menu_row_height()
     } else {
         ((space - separators * SEPARATOR_HEIGHT) / rows)
-            .clamp(16.0, theme::MENU_ROW_HEIGHT)
+            .clamp(16.0, theme::menu_row_height())
     }
 }
 
@@ -81,7 +81,7 @@ impl PlayerFrameController {
                     .flex()
                     .items_center()
                     .text_size(px(12.0))
-                    .text_color(rgb(theme::TITLE_TEXT))
+                    .text_color(rgb(theme::title_text()))
                     .child("FlintPlayer"),
             )
             .child(
@@ -92,15 +92,15 @@ impl PlayerFrameController {
                     .child(icon(
                         icons::CHEVRON_DOWN,
                         9.0,
-                        theme::TITLE_CHEVRON,
+                        theme::title_chevron(),
                     )),
             );
 
         let mut bar = div()
             .relative()
-            .h(px(theme::TITLEBAR_HEIGHT))
+            .h(px(theme::titlebar_height()))
             .w_full()
-            .bg(rgb(theme::TITLE_BG))
+            .bg(rgb(theme::title_bg()))
             .on_mouse_down(MouseButton::Left, |_, window, _| {
                 window.start_window_move();
             })
@@ -111,8 +111,8 @@ impl PlayerFrameController {
                     .left(px(94.0))
                     .top(px(8.0))
                     .w(px(1.0))
-                    .h(px(theme::TITLEBAR_HEIGHT - 16.0))
-                    .bg(rgb(theme::TITLE_DIVIDER)),
+                    .h(px(theme::titlebar_height() - 16.0))
+                    .bg(rgb(theme::title_divider())),
             );
 
         if has_format {
@@ -127,7 +127,7 @@ impl PlayerFrameController {
                         .flex()
                         .items_center()
                         .text_size(px(11.0))
-                        .text_color(rgb(theme::TITLE_META))
+                        .text_color(rgb(theme::title_meta()))
                         .child(format),
                 )
                 .child(
@@ -136,8 +136,8 @@ impl PlayerFrameController {
                         .left(px(132.0))
                         .top(px(8.0))
                         .w(px(1.0))
-                        .h(px(theme::TITLEBAR_HEIGHT - 16.0))
-                        .bg(rgb(theme::TITLE_DIVIDER)),
+                        .h(px(theme::titlebar_height() - 16.0))
+                        .bg(rgb(theme::title_divider())),
                 );
         }
 
@@ -148,9 +148,9 @@ impl PlayerFrameController {
             96.0,
             icons::PIN,
             if pinned {
-                theme::TITLE_PIN_ACTIVE
+                theme::title_pin_active()
             } else {
-                theme::TITLE_BUTTON_TINT
+                theme::title_button_tint()
             },
             false,
         )
@@ -162,7 +162,7 @@ impl PlayerFrameController {
             "titlebar-minimize",
             66.0,
             icons::MINIMIZE,
-            theme::TITLE_BUTTON_TINT,
+            theme::title_button_tint(),
             false,
         )
         .on_click(cx.listener(|_, _, window, _| window.minimize_window()));
@@ -171,7 +171,7 @@ impl PlayerFrameController {
             "titlebar-maximize",
             36.0,
             icons::MAXIMIZE,
-            theme::TITLE_BUTTON_TINT,
+            theme::title_button_tint(),
             false,
         )
         .on_click(cx.listener(|_, _, window, _| window.zoom_window()));
@@ -180,7 +180,7 @@ impl PlayerFrameController {
             "titlebar-close",
             6.0,
             icons::CLOSE,
-            theme::TITLE_BUTTON_TINT,
+            theme::title_button_tint(),
             true,
         )
         .on_click(cx.listener(|this, _, _, cx| this.quit(cx)));
@@ -198,7 +198,7 @@ impl PlayerFrameController {
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(px(12.0))
-                .text_color(rgb(theme::TITLE_SOURCE))
+                .text_color(rgb(theme::title_source()))
                 .child(source),
         )
         .child(pin)
@@ -221,10 +221,10 @@ impl PlayerFrameController {
         let x = self.menu_level_left(level, max_right);
         let mut y = self.menu_level_top(level, max_bottom);
         let mut available = (max_bottom - y).max(120.0);
-        let mut row_height = theme::MENU_ROW_HEIGHT;
+        let mut row_height = theme::menu_row_height();
         let content = menu_panel_height(entries, row_height);
         if (level > 0 || self.menu_anchor().is_some()) && y + content > max_bottom {
-            y = (max_bottom - content).max(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
+            y = (max_bottom - content).max(theme::titlebar_height() + PANEL_PADDING);
             available = (max_bottom - y).max(120.0);
             row_height = menu_row_height(entries, available);
         }
@@ -237,9 +237,9 @@ impl PlayerFrameController {
             .w(px(PANEL_WIDTH))
             .max_h(px(available))
             .py(px(PANEL_PADDING))
-            .bg(rgb(theme::MENU_BG))
+            .bg(rgb(theme::menu_bg()))
             .border_1()
-            .border_color(rgb(theme::MENU_BORDER))
+            .border_color(rgb(theme::menu_border()))
             .occlude()
             .on_click(cx.listener(|_, _, _, cx| cx.stop_propagation()));
 
@@ -268,13 +268,13 @@ impl PlayerFrameController {
     fn menu_level_top(&self, level: usize, max_bottom: f32) -> f32 {
         let mut top = self
             .menu_anchor()
-            .map(|(_, y)| y.max(theme::TITLEBAR_HEIGHT + PANEL_PADDING))
-            .unwrap_or(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
+            .map(|(_, y)| y.max(theme::titlebar_height() + PANEL_PADDING))
+            .unwrap_or(theme::titlebar_height() + PANEL_PADDING);
         for depth in 0..level {
             let entries = self.entries_at(depth);
-            let content = menu_panel_height(entries, theme::MENU_ROW_HEIGHT);
+            let content = menu_panel_height(entries, theme::menu_row_height());
             if (depth > 0 || self.menu_anchor().is_some()) && top + content > max_bottom {
-                top = (max_bottom - content).max(theme::TITLEBAR_HEIGHT + PANEL_PADDING);
+                top = (max_bottom - content).max(theme::titlebar_height() + PANEL_PADDING);
             }
             let row_height = menu_row_height(entries, (max_bottom - top).max(120.0));
             let Some(&index) = self.open_path().get(depth) else {
@@ -307,7 +307,7 @@ impl PlayerFrameController {
                 .w_full()
                 .flex()
                 .items_center()
-                .child(div().h(px(1.0)).w_full().bg(rgb(theme::MENU_SEPARATOR)))
+                .child(div().h(px(1.0)).w_full().bg(rgb(theme::menu_separator())))
                 .into_any();
         }
 
@@ -319,9 +319,9 @@ impl PlayerFrameController {
             ""
         };
         let title_color = if entry.enabled {
-            theme::MENU_TEXT
+            theme::menu_text()
         } else {
-            theme::MENU_TEXT_DISABLED
+            theme::menu_text_disabled()
         };
         let shortcut = entry.shortcut.clone().unwrap_or_default();
         let action = entry.action.clone();
@@ -355,12 +355,12 @@ impl PlayerFrameController {
             }));
 
         row = row
-            .hover(|style| style.bg(rgb(theme::MENU_HOVER)))
+            .hover(|style| style.bg(rgb(theme::menu_hover())))
             .child(
                 div()
                     .w(px(check_width))
                     .flex_shrink_0()
-                    .text_color(rgb(theme::MENU_CHECK))
+                    .text_color(rgb(theme::menu_check()))
                     .child(check),
             )
             .child(div().flex_1().child(entry.title.clone()))
@@ -368,14 +368,14 @@ impl PlayerFrameController {
                 div()
                     .flex_shrink_0()
                     .pr(px(4.0))
-                    .text_color(rgb(theme::MENU_SHORTCUT))
+                    .text_color(rgb(theme::menu_shortcut()))
                     .child(shortcut),
             )
             .child(
                 div()
                     .w(px(14.0))
                     .flex_shrink_0()
-                    .text_color(rgb(theme::MENU_SHORTCUT))
+                    .text_color(rgb(theme::menu_shortcut()))
                     .child(arrow),
             );
 
@@ -387,7 +387,7 @@ impl PlayerFrameController {
         Some(
             div()
                 .absolute()
-                .bottom(px(theme::CONTROL_BAR_HEIGHT + 16.0))
+                .bottom(px(theme::control_bar_height() + 16.0))
                 .left_0()
                 .right_0()
                 .flex()
@@ -396,8 +396,8 @@ impl PlayerFrameController {
                     div()
                         .px_3()
                         .py(px(6.0))
-                        .bg(rgb(theme::NOTICE_BG))
-                        .text_color(rgb(theme::NOTICE_TEXT))
+                        .bg(rgb(theme::notice_bg()))
+                        .text_color(rgb(theme::notice_text()))
                         .opacity(self.notice_opacity())
                         .child(crate::i18n::tr(notice)),
                 )
@@ -569,12 +569,19 @@ impl PlayerFrameController {
 
 impl Render for PlayerFrameController {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !window.is_window_active() {
+            self.release_hold_speed(cx);
+        }
         if !self.focus_handle().is_focused(window) {
             window.focus(self.focus_handle(), cx);
         }
         if !self.ticker_started {
             self.ticker_started = true;
             self.start_ticker(cx);
+        }
+        if !self.control_started {
+            self.control_started = true;
+            self.start_control_loop(cx);
         }
         if let Some(display) = window.display(cx) {
             let size = display.visible_bounds().size;
@@ -589,6 +596,9 @@ impl Render for PlayerFrameController {
         if let Some(command) = self.pending_window.take() {
             match command {
                 WindowCommand::ToggleMaximize => window.zoom_window(),
+                WindowCommand::ToggleFullscreen => window.toggle_fullscreen(),
+                WindowCommand::Activate => window.activate_window(),
+                WindowCommand::Minimize => window.minimize_window(),
                 WindowCommand::Resize(width, height) => {
                     window.resize(size(px(width), px(height)))
                 }
@@ -703,14 +713,28 @@ impl Render for PlayerFrameController {
             .items_center()
             .justify_center()
             .overflow_hidden()
-            .bg(rgb(theme::VIDEO_BG))
+            .bg(rgb(theme::video_bg()))
+            .on_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                if this.is_menu_open() {
+                    return;
+                }
+                let button = match event.button {
+                    MouseButton::Left => HoldButton::Left,
+                    MouseButton::Right => HoldButton::Right,
+                    MouseButton::Middle => HoldButton::Middle,
+                    _ => return,
+                };
+                if this.begin_hold_speed(button, cx) && button == HoldButton::Right {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .ml(px(self.config.frame_shift_x as f32))
                     .mt(px(self.config.frame_shift_y as f32))
                     .w(relative(scale_x))
                     .h(relative(scale_y * (1.0 - margin_fraction)))
-                    .bg(rgb(theme::VIDEO_BG))
+                    .bg(rgb(theme::video_bg()))
                     .child(canvas),
             );
 
@@ -718,7 +742,7 @@ impl Render for PlayerFrameController {
             .flex_1()
             .w_full()
             .flex()
-            .bg(rgb(theme::VIDEO_BG))
+            .bg(rgb(theme::video_bg()))
             .child(stage);
         if self.is_sidebar_open() {
             content = content.child(crate::features::playlist::view::playlist_panel(
@@ -733,9 +757,9 @@ impl Render for PlayerFrameController {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(theme::BG_PRIMARY))
+            .bg(rgb(theme::bg_primary()))
             .text_size(px(12.0))
-            .text_color(rgb(theme::TITLEBAR_TEXT))
+            .text_color(rgb(theme::titlebar_text()))
             .track_focus(self.focus_handle())
             .key_context(PLAYER_KEY_CONTEXT)
             .on_action(cx.listener(|this, _: &ToggleOsd, _, cx| {
@@ -753,7 +777,7 @@ impl Render for PlayerFrameController {
                 if event.button == MouseButton::Right {
                     if this.is_menu_open() {
                         this.close_menu(cx);
-                    } else {
+                    } else if !this.is_holding_right() {
                         this.open_menu_at(
                             f32::from(event.position.x),
                             f32::from(event.position.y),
@@ -777,6 +801,27 @@ impl Render for PlayerFrameController {
                 }
                 cx.stop_propagation();
             }))
+            .capture_any_mouse_up(cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                this.finish_hold_speed(event.button, event.position, true, cx);
+            }))
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                    this.finish_hold_speed(event.button, event.position, false, cx);
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                    this.finish_hold_speed(event.button, event.position, false, cx);
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Middle,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                    this.finish_hold_speed(event.button, event.position, false, cx);
+                }),
+            )
             .on_drop::<ExternalPaths>(drop_handler)
             .child(self.render_titlebar(cx))
             .child(content)
@@ -792,7 +837,7 @@ impl Render for PlayerFrameController {
             0.0
         };
         let osd_area_width = viewport_width - sidebar_width;
-        let osd_area_height = viewport_height - theme::TITLEBAR_HEIGHT - theme::CONTROL_BAR_HEIGHT;
+        let osd_area_height = viewport_height - theme::titlebar_height() - theme::control_bar_height();
         if let Some(osd) = self.render_osd(osd_area_width, osd_area_height, cx) {
             root = root.child(osd);
         }
@@ -808,14 +853,14 @@ impl Render for PlayerFrameController {
             let backdrop = div()
                 .id("menu-backdrop")
                 .absolute()
-                .top(px(theme::TITLEBAR_HEIGHT))
+                .top(px(theme::titlebar_height()))
                 .left_0()
                 .right_0()
                 .bottom_0()
                 .on_click(cx.listener(|this, _, _, cx| this.close_menu(cx)));
             root = root.child(backdrop);
             let menu_bottom = if self.toolbar_menu().is_some() {
-                viewport_height - theme::CONTROL_BAR_HEIGHT - 4.0
+                viewport_height - theme::control_bar_height() - 4.0
             } else {
                 viewport_height - 8.0
             };
@@ -858,9 +903,9 @@ fn icon_button(
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .hover(move |style| {
             style.bg(rgb(if danger {
-                theme::TITLEBAR_CLOSE_HOVER
+                theme::titlebar_close_hover()
             } else {
-                theme::TITLE_BUTTON_HOVER
+                theme::title_button_hover()
             }))
         })
         .child(icon(kind, 16.0, tint))

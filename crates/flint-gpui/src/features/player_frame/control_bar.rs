@@ -185,7 +185,7 @@ pub fn control_bar(
                 .top(px(9.0))
                 .w(px(seek_width))
                 .h(px(2.0))
-                .bg(rgb(theme::BAR_TRACK)),
+                .bg(rgb(theme::bar_track())),
         )
         .child(
             div()
@@ -194,7 +194,7 @@ pub fn control_bar(
                 .top(px(9.0))
                 .w(px(seek_width * fraction))
                 .h(px(2.0))
-                .bg(rgb(theme::BAR_FILL)),
+                .bg(rgb(theme::bar_fill())),
         );
 
     for marker in chapters {
@@ -205,7 +205,7 @@ pub fn control_bar(
                 .top(px(5.0))
                 .w(px(2.0))
                 .h(px(10.0))
-                .bg(rgb(theme::BAR_CHAPTER)),
+                .bg(rgb(theme::bar_chapter())),
         );
     }
     for marker in bookmarks {
@@ -216,7 +216,7 @@ pub fn control_bar(
                 .top(px(4.0))
                 .w(px(3.0))
                 .h(px(12.0))
-                .bg(rgb(theme::BAR_BOOKMARK)),
+                .bg(rgb(theme::bar_bookmark())),
         );
     }
     seek_area = seek_area.child(
@@ -227,7 +227,7 @@ pub fn control_bar(
             .w(px(10.0))
             .h(px(10.0))
             .rounded(px(5.0))
-            .bg(rgb(theme::BAR_THUMB)),
+            .bg(rgb(theme::bar_thumb())),
     );
 
     let mute_area = div()
@@ -249,7 +249,7 @@ pub fn control_bar(
                 icons::VOLUME
             },
             13.0,
-            theme::CONTROL_BAR_TEXT,
+            theme::control_bar_text(),
         ));
 
     let volume_bounds: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
@@ -289,7 +289,7 @@ pub fn control_bar(
                 .top(px(9.0))
                 .w(px(48.0))
                 .h(px(2.0))
-                .bg(rgb(theme::BAR_TRACK)),
+                .bg(rgb(theme::bar_track())),
         )
         .child(
             div()
@@ -298,7 +298,7 @@ pub fn control_bar(
                 .top(px(9.0))
                 .w(px(48.0 * volume))
                 .h(px(2.0))
-                .bg(rgb(theme::BAR_FILL)),
+                .bg(rgb(theme::bar_fill())),
         )
         .child(
             div()
@@ -308,7 +308,7 @@ pub fn control_bar(
                 .w(px(8.0))
                 .h(px(8.0))
                 .rounded(px(4.0))
-                .bg(rgb(theme::BAR_THUMB)),
+                .bg(rgb(theme::bar_thumb())),
         );
 
     let play_pause = bar_button(
@@ -367,7 +367,7 @@ pub fn control_bar(
             div()
                 .flex_shrink_0()
                 .text_size(px(12.0))
-                .text_color(rgb(theme::CONTROL_BAR_TEXT))
+                .text_color(rgb(theme::control_bar_text()))
                 .child(format!("{elapsed} / {duration_text}")),
         )
         .child(div().w(px(12.0)).flex_shrink_0())
@@ -388,9 +388,9 @@ pub fn control_bar(
     }
 
     let sidebar_tint = if frame.is_sidebar_open() {
-        theme::BAR_SIDEBAR_ACTIVE
+        theme::bar_sidebar_active()
     } else {
-        theme::BAR_CLUSTER_TINT
+        theme::bar_cluster_tint()
     };
 
     row = row
@@ -398,12 +398,12 @@ pub fn control_bar(
         .child(
             cluster_label("cluster-360", "360°")
                 .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)))
+                .hover(|style| style.bg(rgb(theme::control_bar_hover())))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.toggle_toolbar_menu(
                         ToolbarMenu::Panorama,
                         width - 196.0,
-                        height - theme::CONTROL_BAR_HEIGHT - 4.0,
+                        height - theme::control_bar_height() - 4.0,
                         cx,
                     );
                 })),
@@ -411,12 +411,12 @@ pub fn control_bar(
         .child(
             cluster_label("cluster-3d", "3D")
                 .cursor_pointer()
-                .hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)))
+                .hover(|style| style.bg(rgb(theme::control_bar_hover())))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.toggle_toolbar_menu(
                         ToolbarMenu::Stereo,
                         width - 164.0,
-                        height - theme::CONTROL_BAR_HEIGHT - 4.0,
+                        height - theme::control_bar_height() - 4.0,
                         cx,
                     );
                 })),
@@ -424,7 +424,7 @@ pub fn control_bar(
         .child(cluster_button(
             "cluster-ratio",
             icons::RATIO,
-            theme::BAR_CLUSTER_TINT,
+            theme::bar_cluster_tint(),
             false,
         ))
         .child(
@@ -436,7 +436,7 @@ pub fn control_bar(
             cluster_button(
                 "cluster-settings",
                 icons::SETTINGS,
-                theme::BAR_CLUSTER_TINT,
+                theme::bar_cluster_tint(),
                 true,
             )
             .on_click(cx.listener(|this, _, _, cx| {
@@ -444,7 +444,7 @@ pub fn control_bar(
             })),
         )
         .child(
-            cluster_button("cluster-menu", icons::MENU, theme::BAR_CLUSTER_TINT, true)
+            cluster_button("cluster-menu", icons::MENU, theme::bar_cluster_tint(), true)
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(cx))),
         );
 
@@ -508,10 +508,10 @@ pub fn control_bar(
 
     div()
         .relative()
-        .h(px(theme::CONTROL_BAR_HEIGHT))
+        .h(px(theme::control_bar_height()))
         .w_full()
         .overflow_hidden()
-        .bg(rgb(theme::CONTROL_BAR_BG))
+        .bg(rgb(theme::control_bar_bg()))
         .child(
             div()
                 .absolute()
@@ -519,7 +519,7 @@ pub fn control_bar(
                 .top_0()
                 .w_full()
                 .h(px(1.0))
-                .bg(rgb(theme::BAR_BORDER)),
+                .bg(rgb(theme::bar_border())),
         )
         .child(top_row)
         .child(volume_drag_listener)
@@ -537,15 +537,15 @@ fn bar_button(id: &'static str, kind: u8, enabled: bool) -> Stateful<Div> {
         .items_center()
         .justify_center();
     if enabled {
-        button = button.hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)));
+        button = button.hover(|style| style.bg(rgb(theme::control_bar_hover())));
     }
     button.child(icon(
         kind,
         13.0,
         if enabled {
-            theme::BAR_BUTTON_TINT
+            theme::bar_button_tint()
         } else {
-            theme::BAR_BUTTON_DISABLED
+            theme::bar_button_disabled()
         },
     ))
     .child(
@@ -555,7 +555,7 @@ fn bar_button(id: &'static str, kind: u8, enabled: bool) -> Stateful<Div> {
             .top(px(9.0))
             .w(px(1.0))
             .h(px(24.0))
-            .bg(rgb(theme::BAR_BUTTON_DIVIDER)),
+            .bg(rgb(theme::bar_button_divider())),
     )
 }
 
@@ -569,7 +569,7 @@ fn cluster_button(id: &'static str, kind: u8, tint: u32, enabled: bool) -> State
         .items_center()
         .justify_center();
     if enabled {
-        button = button.hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)));
+        button = button.hover(|style| style.bg(rgb(theme::control_bar_hover())));
     }
     button.child(icon(
         kind,
@@ -577,7 +577,7 @@ fn cluster_button(id: &'static str, kind: u8, tint: u32, enabled: bool) -> State
         if enabled {
             tint
         } else {
-            theme::BAR_BUTTON_DISABLED
+            theme::bar_button_disabled()
         },
     ))
 }
@@ -591,7 +591,7 @@ fn cluster_label(id: &'static str, label: &str) -> Stateful<Div> {
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(rgb(theme::BAR_BUTTON_DISABLED))
+        .text_color(rgb(theme::bar_button_disabled()))
         .child(tr(label))
 }
 
@@ -606,11 +606,11 @@ fn chip(id: &'static str, text: String, width: f32) -> Stateful<Div> {
         .justify_center()
         .overflow_hidden()
         .rounded(px(2.0))
-        .bg(rgb(theme::BAR_CHIP_BG))
+        .bg(rgb(theme::bar_chip_bg()))
         .border_1()
-        .border_color(rgb(theme::BAR_CHIP_BORDER))
+        .border_color(rgb(theme::bar_chip_border()))
         .text_size(px(11.0))
-        .text_color(rgb(theme::BAR_CHIP_TEXT))
+        .text_color(rgb(theme::bar_chip_text()))
         .child(text)
 }
 

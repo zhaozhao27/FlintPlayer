@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -14,6 +15,9 @@ pub struct Config {
     pub remember_position: bool,
     pub show_markers: bool,
     pub seek_step_seconds: f64,
+    pub hold_left_speed: f64,
+    pub hold_right_speed: f64,
+    pub hold_middle_speed: f64,
     pub subtitle_scale: f32,
     pub subtitle_color: String,
     pub subtitle_top: bool,
@@ -28,8 +32,14 @@ pub struct Config {
     pub subtitle_smooth_vmr: bool,
     pub subtitle_3d: String,
     pub subtitle_language: String,
+    pub tone_mapping: String,
+    pub target_peak: u32,
+    pub hdr_tone_map: bool,
+    pub hdr_metadata: bool,
     pub stereo_mode: String,
     pub video_renderer: String,
+    pub pixel_shader: String,
+    pub ass_output_engine: String,
     pub avisynth_enabled: bool,
     pub avisynth_script: String,
     pub vapoursynth_enabled: bool,
@@ -158,6 +168,9 @@ impl Default for Config {
             remember_position: true,
             show_markers: true,
             seek_step_seconds: 5.0,
+            hold_left_speed: 0.0,
+            hold_right_speed: 0.0,
+            hold_middle_speed: 0.0,
             subtitle_scale: 1.0,
             subtitle_color: "white".into(),
             subtitle_top: false,
@@ -172,8 +185,14 @@ impl Default for Config {
             subtitle_smooth_vmr: false,
             subtitle_3d: "off".into(),
             subtitle_language: "auto".into(),
+            tone_mapping: "auto".into(),
+            target_peak: 0,
+            hdr_tone_map: true,
+            hdr_metadata: true,
             stereo_mode: "off".into(),
             video_renderer: "auto".into(),
+            pixel_shader: String::new(),
+            ass_output_engine: "basic".into(),
             avisynth_enabled: false,
             avisynth_script: String::new(),
             vapoursynth_enabled: false,
@@ -379,6 +398,9 @@ impl Config {
                         }
                     }
                 }
+                "hold_left_speed" => apply_hold_speed(&mut cfg.hold_left_speed, value),
+                "hold_right_speed" => apply_hold_speed(&mut cfg.hold_right_speed, value),
+                "hold_middle_speed" => apply_hold_speed(&mut cfg.hold_middle_speed, value),
                 "subtitle_scale" => {
                     cfg.subtitle_scale = value.parse().unwrap_or(cfg.subtitle_scale).clamp(0.6, 2.0)
                 }
@@ -417,6 +439,18 @@ impl Config {
                         cfg.subtitle_language = value.to_string();
                     }
                 }
+                "tone_mapping" => {
+                    if matches!(value, "auto" | "clip" | "mobius" | "reinhard" | "hable") {
+                        cfg.tone_mapping = value.to_string();
+                    }
+                }
+                "target_peak" => {
+                    if let Ok(peak) = value.parse::<u32>() {
+                        cfg.target_peak = if peak == 0 { 0 } else { peak.clamp(100, 2000) };
+                    }
+                }
+                "hdr_tone_map" => cfg.hdr_tone_map = value == "true" || value == "1",
+                "hdr_metadata" => cfg.hdr_metadata = value == "true" || value == "1",
                 "stereo_mode" => {
                     if matches!(
                         value,
@@ -437,6 +471,12 @@ impl Config {
                         "auto" | "opengl" | "null-compressed" | "null-uncompressed"
                     ) {
                         cfg.video_renderer = value.to_string();
+                    }
+                }
+                "pixel_shader" => cfg.pixel_shader = value.trim().to_string(),
+                "ass_output_engine" => {
+                    if matches!(value, "file" | "basic" | "custom") {
+                        cfg.ass_output_engine = value.to_string();
                     }
                 }
                 "pano_enabled" => cfg.pano_enabled = value == "true" || value == "1",
@@ -764,6 +804,9 @@ impl Config {
              remember_position={}\n\
              show_markers={}\n\
              seek_step_seconds={}\n\
+             hold_left_speed={}\n\
+             hold_right_speed={}\n\
+             hold_middle_speed={}\n\
              subtitle_scale={}\n\
              subtitle_color={}\n\
              subtitle_top={}\n\
@@ -778,8 +821,14 @@ impl Config {
              subtitle_smooth_vmr={}\n\
              subtitle_3d={}\n\
              subtitle_language={}\n\
+             tone_mapping={}\n\
+             target_peak={}\n\
+             hdr_tone_map={}\n\
+             hdr_metadata={}\n\
              stereo_mode={}\n\
              video_renderer={}\n\
+             pixel_shader={}\n\
+             ass_output_engine={}\n\
              avisynth_enabled={}\n\
              avisynth_script={}\n\
              vapoursynth_enabled={}\n\
@@ -924,6 +973,9 @@ impl Config {
             self.remember_position,
             self.show_markers,
             self.seek_step_seconds,
+            self.hold_left_speed,
+            self.hold_right_speed,
+            self.hold_middle_speed,
             self.subtitle_scale,
             sanitize(&self.subtitle_color),
             self.subtitle_top,
@@ -938,8 +990,14 @@ impl Config {
             self.subtitle_smooth_vmr,
             sanitize(&self.subtitle_3d),
             sanitize(&self.subtitle_language),
+            sanitize(&self.tone_mapping),
+            self.target_peak,
+            self.hdr_tone_map,
+            self.hdr_metadata,
             sanitize(&self.stereo_mode),
             sanitize(&self.video_renderer),
+            sanitize(&self.pixel_shader),
+            sanitize(&self.ass_output_engine),
             self.avisynth_enabled,
             sanitize(&self.avisynth_script),
             self.vapoursynth_enabled,
@@ -1158,8 +1216,110 @@ pub fn config_dir() -> PathBuf {
         .join("flintplayer")
 }
 
+static ACTIVE_PROFILE: Mutex<Option<String>> = Mutex::new(None);
+
+pub const HOLD_SPEED_PRESETS: [f64; 8] = [0.0, 0.5, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
+
+pub fn is_hold_speed_preset(speed: f64) -> bool {
+    HOLD_SPEED_PRESETS
+        .iter()
+        .any(|preset| (preset - speed).abs() < f64::EPSILON)
+}
+
+fn apply_hold_speed(target: &mut f64, value: &str) {
+    if let Ok(speed) = value.parse::<f64>() {
+        if is_hold_speed_preset(speed) {
+            *target = speed;
+        }
+    }
+}
+
+pub fn valid_profile_name(name: &str) -> bool {
+    !name.is_empty()
+        && name == name.trim()
+        && name.chars().count() <= 32
+        && name
+            .chars()
+            .all(|ch| ch.is_alphanumeric() || ch == '_' || ch == '-' || ch == ' ')
+}
+
+pub fn config_path_in(base: &Path, profile: Option<&str>) -> PathBuf {
+    match profile.filter(|name| valid_profile_name(name)) {
+        Some(name) => base.join("profiles").join(name).join("config.ini"),
+        None => base.join("config.ini"),
+    }
+}
+
+pub fn profiles_dir() -> PathBuf {
+    config_dir().join("profiles")
+}
+
+pub fn profile_config_path(name: &str) -> Option<PathBuf> {
+    valid_profile_name(name).then(|| profiles_dir().join(name).join("config.ini"))
+}
+
+pub fn list_profiles() -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(profiles_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let complete = entry.path().join("config.ini").is_file();
+            (complete && valid_profile_name(&name)).then_some(name)
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+pub fn migrate_legacy_profiles() -> Vec<String> {
+    let directory = profiles_dir();
+    let Ok(entries) = std::fs::read_dir(&directory) else {
+        return Vec::new();
+    };
+    let mut migrated = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("ini") {
+            continue;
+        }
+        let Some(name) = path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+        else {
+            continue;
+        };
+        if !valid_profile_name(&name) {
+            continue;
+        }
+        let dir = directory.join(&name);
+        if dir.exists() || std::fs::create_dir_all(&dir).is_err() {
+            continue;
+        }
+        if std::fs::rename(&path, dir.join("config.ini")).is_ok() {
+            migrated.push(name);
+        }
+    }
+    migrated
+}
+
+pub fn set_profile(profile: Option<&str>) -> Option<String> {
+    let effective = profile
+        .filter(|name| !name.is_empty())
+        .and_then(|name| valid_profile_name(name).then(|| name.to_string()));
+    if let Ok(mut slot) = ACTIVE_PROFILE.lock() {
+        *slot = effective.clone();
+    }
+    effective
+}
+
+pub fn active_profile() -> Option<String> {
+    ACTIVE_PROFILE.lock().ok().and_then(|slot| slot.clone())
+}
+
 pub fn config_path() -> PathBuf {
-    config_dir().join("config.ini")
+    config_path_in(&config_dir(), active_profile().as_deref())
 }
 
 #[cfg(test)]
@@ -1454,6 +1614,113 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert!(saved.contains("capture_audio_source=alsa_input.mic\n"));
         assert_eq!(Config::parse(&saved).capture_audio_source, "alsa_input.mic");
+    }
+
+    #[test]
+    fn round_trips_pixel_shader() {
+        let parsed = Config::parse("pixel_shader=sharpen-3x3\n");
+        assert_eq!(parsed.pixel_shader, "sharpen-3x3");
+        assert_eq!(Config::parse("").pixel_shader, "");
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-shader-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            pixel_shader: "bt601-bt709".into(),
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("pixel_shader=bt601-bt709\n"));
+        assert_eq!(Config::parse(&saved).pixel_shader, "bt601-bt709");
+    }
+
+    #[test]
+    fn round_trips_ass_output_engine() {
+        let parsed = Config::parse("ass_output_engine=custom\n");
+        assert_eq!(parsed.ass_output_engine, "custom");
+        assert_eq!(Config::parse("").ass_output_engine, "basic");
+        assert_eq!(
+            Config::parse("ass_output_engine=bogus\n").ass_output_engine,
+            "basic"
+        );
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-ass-engine-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            ass_output_engine: "file".into(),
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("ass_output_engine=file\n"));
+        assert_eq!(Config::parse(&saved).ass_output_engine, "file");
+    }
+
+    #[test]
+    fn round_trips_hdr_settings() {
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-hdr-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            tone_mapping: "hable".into(),
+            target_peak: 600,
+            hdr_tone_map: false,
+            hdr_metadata: false,
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("tone_mapping=hable\n"));
+        assert!(saved.contains("target_peak=600\n"));
+        assert!(saved.contains("hdr_tone_map=false\n"));
+        assert!(saved.contains("hdr_metadata=false\n"));
+        let reloaded = Config::parse(&saved);
+        assert_eq!(reloaded.tone_mapping, "hable");
+        assert_eq!(reloaded.target_peak, 600);
+        assert!(!reloaded.hdr_tone_map);
+        assert!(!reloaded.hdr_metadata);
+    }
+
+    #[test]
+    fn round_trips_hold_speeds() {
+        let parsed = Config::parse(
+            "hold_left_speed=2\nhold_right_speed=0.5\nhold_middle_speed=5\n",
+        );
+        assert_eq!(parsed.hold_left_speed, 2.0);
+        assert_eq!(parsed.hold_right_speed, 0.5);
+        assert_eq!(parsed.hold_middle_speed, 5.0);
+        let rejected = Config::parse("hold_left_speed=3.3\nhold_middle_speed=-1\n");
+        assert_eq!(rejected.hold_left_speed, 0.0);
+        assert_eq!(rejected.hold_middle_speed, 0.0);
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-hold-speed-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            hold_left_speed: 1.5,
+            hold_right_speed: 4.0,
+            hold_middle_speed: 0.0,
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("hold_left_speed=1.5\n"));
+        assert!(saved.contains("hold_right_speed=4\n"));
+        let reread = Config::parse(&saved);
+        assert_eq!(reread.hold_left_speed, 1.5);
+        assert_eq!(reread.hold_right_speed, 4.0);
+        assert_eq!(reread.hold_middle_speed, 0.0);
     }
 
     #[test]
@@ -1764,5 +2031,73 @@ mod tests {
         let parsed = Config::parse("window_w=100\nwindow_h=100\n");
         assert!(parsed.window_w >= 720.0);
         assert!(parsed.window_h >= 480.0);
+    }
+
+    #[test]
+    fn validates_profile_names() {
+        for name in [
+            "work",
+            "demo-1",
+            "A_b9",
+            "0",
+            "中文配置",
+            "客厅 电视",
+            "café",
+            "x".repeat(32).as_str(),
+        ] {
+            assert!(valid_profile_name(name), "{name}");
+        }
+        for name in [
+            "",
+            "../etc",
+            "a/b",
+            "a\\b",
+            " pad",
+            "pad ",
+            "dot.name",
+            "a:b",
+            "x".repeat(33).as_str(),
+        ] {
+            assert!(!valid_profile_name(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn resolves_profile_config_paths() {
+        let base = Path::new("/tmp/flint-profile-test");
+        assert_eq!(
+            config_path_in(base, None),
+            Path::new("/tmp/flint-profile-test/config.ini")
+        );
+        assert_eq!(
+            config_path_in(base, Some("work")),
+            Path::new("/tmp/flint-profile-test/profiles/work/config.ini")
+        );
+        assert_eq!(
+            config_path_in(base, Some("../escape")),
+            Path::new("/tmp/flint-profile-test/config.ini")
+        );
+        assert_eq!(
+            config_path_in(base, Some("")),
+            Path::new("/tmp/flint-profile-test/config.ini")
+        );
+    }
+
+    #[test]
+    fn switches_active_profile() {
+        assert_eq!(set_profile(Some("work")), Some("work".to_string()));
+        assert_eq!(active_profile(), Some("work".to_string()));
+        assert!(config_path().ends_with("profiles/work/config.ini"));
+
+        assert_eq!(set_profile(Some("../escape")), None);
+        assert_eq!(active_profile(), None);
+        assert!(config_path().ends_with("flintplayer/config.ini"));
+
+        assert_eq!(set_profile(Some("")), None);
+        assert_eq!(active_profile(), None);
+
+        assert_eq!(set_profile(Some("demo")), Some("demo".to_string()));
+        assert_eq!(set_profile(None), None);
+        assert_eq!(active_profile(), None);
     }
 }

@@ -212,6 +212,14 @@ impl SettingsController {
         cx.notify();
     }
 
+    pub fn close_dropdown(&mut self, cx: &mut Context<Self>) -> bool {
+        let closed = self.dropdown.take().is_some();
+        if closed {
+            cx.notify();
+        }
+        closed
+    }
+
     pub fn screen_sources(&self) -> &[ScreenSource] {
         &self.screen_sources
     }

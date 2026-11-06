@@ -5,29 +5,77 @@ use super::MenuEntry;
 
 const MAX_VISIBLE_CHAPTERS: usize = 40;
 const SPEEDS: [f32; 9] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+const HOLD_BUTTONS: [(&str, &str); 3] = [
+    ("left", "左键"),
+    ("right", "右键"),
+    ("middle", "中键(滚轮)"),
+];
+
+pub const EXTRA_ACTIONS: &[&str] = &[
+    "ab-a",
+    "ab-b",
+    "ab-off",
+    "audio-open-folder",
+    "audio-record-play-folder-toggle",
+    "audio-record-toggle",
+    "chapter-next",
+    "chapter-prev",
+    "load-audio",
+    "mute-toggle",
+    "play-pause",
+    "remember-position-toggle",
+    "repeat-toggle",
+    "seek-back-10",
+    "seek-end",
+    "seek-forward-10",
+    "seek-start",
+    "shuffle-toggle",
+    "speed-down",
+    "speed-up",
+    "step-backward",
+    "step-forward",
+    "subtitle-open",
+    "track:a:no",
+    "track:s:no",
+    "volume-down",
+    "volume-up",
+];
 
 pub struct MenuData {
     pub chapters: Vec<ChapterInfo>,
     pub tracks: Vec<TrackInfo>,
     pub devices: Vec<DeviceInfo>,
     pub speed: f64,
+    pub hold_left_speed: f64,
+    pub hold_right_speed: f64,
+    pub hold_middle_speed: f64,
     pub repeat: bool,
     pub shuffle: bool,
     pub remember_position: bool,
     pub has_prev: bool,
     pub has_next: bool,
+    pub whisper: bool,
 }
 
 pub fn apply_dynamic(entries: &mut [MenuEntry], data: &MenuData) {
     for entry in entries.iter_mut() {
-        match entry.title.as_str() {
-            "播放" => *entry = play_menu(data),
-            "字幕" => *entry = subtitle_menu(data),
-            "声音" => *entry = sound_menu(data),
-            "摄像头/其他设备" => *entry = device_menu(&data.devices),
+        let key = entry.dynamic.as_deref().unwrap_or(entry.title.as_str());
+        match key {
+            "play" | "播放" => replace(entry, play_menu(data)),
+            "subtitle" | "字幕" => replace(entry, subtitle_menu(data)),
+            "sound" | "声音" => replace(entry, sound_menu(data)),
+            "device" | "摄像头/其他设备" => replace(entry, device_menu(&data.devices)),
             _ => apply_dynamic(&mut entry.children, data),
         }
     }
+}
+
+fn replace(entry: &mut MenuEntry, mut menu: MenuEntry) {
+    if !entry.title.is_empty() {
+        menu.title = std::mem::take(&mut entry.title);
+    }
+    menu.dynamic = entry.dynamic.take();
+    *entry = menu;
 }
 
 fn device_menu(devices: &[DeviceInfo]) -> MenuEntry {
@@ -121,6 +169,7 @@ fn play_menu(data: &MenuData) -> MenuEntry {
                 ],
             ),
             MenuEntry::submenu("播放速度", speed_items),
+            hold_speed_menu(data),
             MenuEntry::submenu(
                 "播放列表",
                 vec![
@@ -178,6 +227,36 @@ fn play_menu(data: &MenuData) -> MenuEntry {
     )
 }
 
+fn hold_speed_menu(data: &MenuData) -> MenuEntry {
+    let current = [data.hold_left_speed, data.hold_right_speed, data.hold_middle_speed];
+    let items = HOLD_BUTTONS
+        .iter()
+        .zip(current)
+        .map(|((button, label), value)| {
+            let speeds: Vec<MenuEntry> = flint_core::config::HOLD_SPEED_PRESETS
+                .iter()
+                .map(|speed| {
+                    MenuEntry::action(
+                        hold_speed_label(*speed),
+                        format!("hold-speed:{button}:{speed}"),
+                    )
+                    .checked((value - speed).abs() < f64::EPSILON)
+                })
+                .collect();
+            MenuEntry::submenu(*label, speeds)
+        })
+        .collect();
+    MenuEntry::submenu("按住鼠标键时", items)
+}
+
+fn hold_speed_label(speed: f64) -> String {
+    if speed == 0.0 {
+        "不使用".to_string()
+    } else {
+        format!("按下时以 {speed} 倍速度播放")
+    }
+}
+
 fn subtitle_menu(data: &MenuData) -> MenuEntry {
     let tracks: Vec<&TrackInfo> = data.tracks.iter().filter(|track| track.kind == "sub").collect();
     let mut items = vec![
@@ -192,6 +271,12 @@ fn subtitle_menu(data: &MenuData) -> MenuEntry {
                 .checked(track.selected),
         );
     }
+    items.push(MenuEntry::separator());
+    items.extend(super::generated::ass_engines());
+    items.push(MenuEntry::separator());
+    items.push(
+        MenuEntry::action("生成有声字幕", "whisper-generate").disabled_if(!data.whisper),
+    );
     MenuEntry::submenu("字幕", items)
 }
 

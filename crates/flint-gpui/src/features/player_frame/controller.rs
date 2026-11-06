@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use flint_core::config::Config;
@@ -7,6 +8,7 @@ use flint_media::CaptureSmoothing;
 use flint_media::stereo::StereoMode;
 use gpui::*;
 
+use crate::control::{ControlJob, ControlRequest};
 use crate::features::capture::CaptureController;
 use crate::features::playback::{PlaybackController, RawInput};
 use crate::features::playlist::PlaylistController;
@@ -90,9 +92,25 @@ enum TrackKind {
     Audio,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HoldButton {
+    Left,
+    Right,
+    Middle,
+}
+
+struct HoldSpeed {
+    button: HoldButton,
+    previous: f64,
+    started: Instant,
+}
+
 #[derive(Clone, Copy)]
 pub enum WindowCommand {
     ToggleMaximize,
+    ToggleFullscreen,
+    Activate,
+    Minimize,
     Resize(f32, f32),
     Scale(f32),
     Fraction(f32),
@@ -177,6 +195,11 @@ pub struct PlayerFrameController {
     last_fingerprint: String,
     cpu: CpuMeter,
     pub(crate) display_size: (u32, u32),
+    control_jobs: Option<Receiver<ControlJob>>,
+    extensions: Vec<crate::extensions::Extension>,
+    open_generation: u64,
+    hold_speed: Option<HoldSpeed>,
+    pub(crate) control_started: bool,
     pub(crate) control_open: bool,
     pub(crate) control_tab: usize,
     toolbar_menu: Option<ToolbarMenu>,
@@ -212,7 +235,7 @@ impl PlayerFrameController {
         let flip_vertical = config.flip_vertical;
         let osd_mode = config.osd_visible.then_some(OsdMode::Full);
         crate::i18n::set_language(crate::i18n::Language::from_code(&config.language));
-        let menu = menu::main_menu();
+        let menu = menu::load_menu();
         let shortcuts = menu::collect_shortcuts(&menu);
         let stereo_mode = StereoMode::from_key(&config.stereo_mode);
         let pano_view = config.pano_enabled.then(|| flint_media::panorama::View {
@@ -221,6 +244,14 @@ impl PlayerFrameController {
             fov: config.pano_fov.to_radians(),
         });
         let initial_audio_device = config.audio_output_method.clone();
+        let initial_pixel_shader = config.pixel_shader.clone();
+        let initial_ass_engine = config.ass_output_engine.clone();
+        let initial_hdr_settings = (
+            config.tone_mapping.clone(),
+            config.target_peak,
+            config.hdr_tone_map,
+            config.hdr_metadata,
+        );
         let playback = cx.new(|_| {
             let mut playback = PlaybackController::new();
             playback.configure_audio_device(&initial_audio_device);
@@ -229,6 +260,14 @@ impl PlayerFrameController {
         playback.update(cx, |playback, cx| {
             playback.set_stereo(stereo_mode, cx);
             playback.set_pano(pano_view, cx);
+            playback.set_pixel_shader(&initial_pixel_shader);
+            playback.set_ass_engine(&initial_ass_engine);
+            playback.set_hdr_settings(
+                &initial_hdr_settings.0,
+                initial_hdr_settings.1,
+                initial_hdr_settings.2,
+                initial_hdr_settings.3,
+            );
         });
         Self {
             playback,
@@ -254,6 +293,8 @@ impl PlayerFrameController {
             eof_handled: true,
             ticker_started: false,
             pending_open: None,
+            extensions: crate::extensions::discover(&crate::extensions::extensions_dir()),
+            open_generation: 0,
             brightness,
             contrast,
             saturation,
@@ -276,6 +317,9 @@ impl PlayerFrameController {
             last_fingerprint: String::new(),
             cpu: CpuMeter::new(),
             display_size: (0, 0),
+            control_jobs: crate::control::start().map(|link| link.jobs),
+            hold_speed: None,
+            control_started: false,
             control_open: false,
             control_tab: 0,
             toolbar_menu: None,
@@ -373,6 +417,284 @@ impl PlayerFrameController {
             }
         })
         .detach();
+    }
+
+    pub(crate) fn start_control_loop(&mut self, cx: &mut Context<Self>) {
+        let Some(jobs) = self.control_jobs.take() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(20))
+                    .await;
+                loop {
+                    let job = match jobs.try_recv() {
+                        Ok(job) => job,
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => return,
+                    };
+                    let result = this.update(cx, |this, cx| this.handle_control(job.request, cx));
+                    match result {
+                        Ok(result) => {
+                            let _ = job.reply.send(result);
+                        }
+                        Err(_) => {
+                            let _ = job.reply.send(Err("窗口已关闭".to_string()));
+                            return;
+                        }
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn handle_control(
+        &mut self,
+        request: ControlRequest,
+        cx: &mut Context<Self>,
+    ) -> Result<serde_json::Value, String> {
+        use serde_json::json;
+
+        match request {
+            ControlRequest::Ping => Ok(json!({ "pong": true, "pid": std::process::id() })),
+            ControlRequest::Version => Ok(json!({
+                "name": "flintplayer",
+                "version": env!("CARGO_PKG_VERSION"),
+            })),
+            ControlRequest::Open(path) => {
+                self.open_source(&path, cx);
+                Ok(json!({ "opened": path }))
+            }
+            ControlRequest::Add(path) => {
+                let path = std::path::PathBuf::from(&path);
+                let added = if path.is_dir() {
+                    self.playlist
+                        .update(cx, |playlist, _| playlist.add_folder(&path))
+                } else {
+                    self.playlist
+                        .update(cx, |playlist, _| playlist.add_files(vec![path.clone()]))
+                };
+                self.sync_playlist(cx);
+                Ok(json!({ "added": added, "path": path.display().to_string() }))
+            }
+            ControlRequest::Seek { seconds, delta } => {
+                let (target, delta) = match (seconds, delta) {
+                    (Some(seconds), None) => (seconds, None),
+                    (None, Some(delta)) => {
+                        let position = self.playback.read(cx).state().position;
+                        (position + delta, Some(delta))
+                    }
+                    _ => return Err("seek 需要 seconds 或 delta（二选一）".to_string()),
+                };
+                let playback = self.playback.read(cx);
+                if !playback.is_loaded() {
+                    return Err("未打开媒体".to_string());
+                }
+                let target = target.clamp(0.0, playback.state().duration.max(0.0));
+                self.playback.update(cx, |playback, cx| match delta {
+                    Some(delta) => playback.seek_relative(delta, cx),
+                    None => playback.seek_to(target, cx),
+                });
+                Ok(json!({ "position": target }))
+            }
+            ControlRequest::Volume { value, delta } => {
+                let current = self.playback.read(cx).state().volume;
+                let target = match (value, delta) {
+                    (Some(value), None) => value,
+                    (None, Some(delta)) => current + delta,
+                    _ => return Err("volume 需要 value 或 delta（二选一）".to_string()),
+                };
+                let target = target.clamp(0.0, 100.0);
+                self.playback
+                    .update(cx, |playback, cx| playback.set_volume(target, cx));
+                Ok(json!({ "volume": target }))
+            }
+            ControlRequest::Command(id) => {
+                if id == "exit" {
+                    self.quit(cx);
+                    return Ok(json!({ "command": id }));
+                }
+                if !self.is_known_command(&id) {
+                    return Err(format!(
+                        "未知或当前不可用的命令：{id}（示例：play-pause、fullscreen、mute-toggle、seek-forward-10、pixel-shader-cycle）"
+                    ));
+                }
+                if id == "fullscreen" {
+                    self.request_window(WindowCommand::ToggleFullscreen, cx);
+                } else {
+                    self.handle_action(id.clone(), cx);
+                }
+                cx.notify();
+                Ok(json!({ "command": id }))
+            }
+            ControlRequest::Get(key) => {
+                let playback = self.playback.read(cx);
+                let state = playback.state();
+                match key.as_str() {
+                    "position" => Ok(json!(state.position)),
+                    "duration" => Ok(json!(state.duration)),
+                    "volume" => Ok(json!(state.volume)),
+                    "paused" => Ok(json!(state.paused)),
+                    "path" => self
+                        .current_media(cx)
+                        .map(|path| json!(path.display().to_string()))
+                        .ok_or_else(|| "未打开媒体".to_string()),
+                    "profile" => Ok(json!(flint_core::config::active_profile())),
+                    "speed" => Ok(json!(playback.speed())),
+                    "hold_speeds" => Ok(json!({
+                        "left": self.config.hold_left_speed,
+                        "right": self.config.hold_right_speed,
+                        "middle": self.config.hold_middle_speed,
+                    })),
+                    "pixel_shader" => Ok(json!({
+                        "key": self.config.pixel_shader.clone(),
+                        "label": crate::shaders::label(&self.config.pixel_shader),
+                    })),
+                    "ass_output_engine" => Ok(json!({
+                        "key": self.config.ass_output_engine.clone(),
+                        "label": crate::subtitle_engine::label(&self.config.ass_output_engine),
+                    })),
+                    "tone_mapping" => Ok(json!({
+                        "key": self.config.tone_mapping.clone(),
+                        "label": crate::hdr::label(&self.config.tone_mapping),
+                    })),
+                    "target_peak" => Ok(json!(self.config.target_peak)),
+                    "hdr" => Ok(json!({
+                        "tone_map": self.config.hdr_tone_map,
+                        "metadata": self.config.hdr_metadata,
+                        "gamma": state.video_gamma.clone(),
+                    })),
+                    other => Err(format!(
+                        "未知属性：{other}（可用：position、duration、volume、paused、path、profile、speed、hold_speeds、pixel_shader、ass_output_engine、tone_mapping、target_peak、hdr）"
+                    )),
+                }
+            }
+            ControlRequest::Set { key, value } => match key.as_str() {
+                "volume" => {
+                    let target = value
+                        .as_f64()
+                        .ok_or("volume 需要数字")?
+                        .clamp(0.0, 100.0);
+                    self.playback
+                        .update(cx, |playback, cx| playback.set_volume(target, cx));
+                    Ok(json!({ "volume": target }))
+                }
+                "pixel_shader" => {
+                    let key = value.as_str().ok_or("pixel_shader 需要字符串")?;
+                    if !key.is_empty() && crate::shaders::spec(key).is_none() {
+                        let keys: Vec<&str> =
+                            crate::shaders::SHADERS.iter().map(|spec| spec.key).collect();
+                        return Err(format!(
+                            "未知着色器：{key}（可用：空字符串表示关闭，或 {}）",
+                            keys.join("、")
+                        ));
+                    }
+                    self.apply_pixel_shader(key.to_string(), cx);
+                    Ok(json!({ "pixel_shader": self.config.pixel_shader.clone() }))
+                }
+                "profile" => {
+                    let name = value.as_str().ok_or("profile 需要字符串")?;
+                    if name.is_empty() {
+                        flint_core::config::set_profile(None);
+                        let config = Config::load();
+                        self.apply_config(config, cx);
+                        return Ok(json!({
+                            "profile": serde_json::Value::Null,
+                            "path": flint_core::config::config_path().display().to_string(),
+                        }));
+                    }
+                    let Some(active) = flint_core::config::set_profile(Some(name)) else {
+                        return Err(
+                            "配置名称无效：只能包含字母、数字、空格、- 和 _，最长 32 个字符"
+                                .to_string(),
+                        );
+                    };
+                    let config = flint_core::config::profile_config_path(&active)
+                        .filter(|path| path.is_file())
+                        .map(|path| Config::load_from(&path))
+                        .unwrap_or_else(|| self.config.clone());
+                    self.apply_config(config, cx);
+                    Ok(json!({
+                        "profile": active,
+                        "path": flint_core::config::config_path().display().to_string(),
+                    }))
+                }
+                "hold_left_speed" | "hold_right_speed" | "hold_middle_speed" => {
+                    let speed = value.as_f64().ok_or("倍速需要数字")?;
+                    if !flint_core::config::is_hold_speed_preset(speed) {
+                        return Err("倍速只能是 0、0.5、1.5、2、2.5、3、4 或 5".to_string());
+                    }
+                    let button = match key.as_str() {
+                        "hold_left_speed" => "left",
+                        "hold_right_speed" => "right",
+                        _ => "middle",
+                    };
+                    self.set_hold_speed(button, speed, cx);
+                    Ok(json!({ "key": key, "speed": speed }))
+                }
+                other => Err(format!(
+                    "未知属性：{other}（可用：volume、pixel_shader、profile、hold_left_speed、hold_right_speed、hold_middle_speed）"
+                )),
+            },
+            ControlRequest::Resize { width, height } => {
+                let width = width.clamp(200, 8192) as f32;
+                let height = height.clamp(200, 8192) as f32;
+                self.request_window(WindowCommand::Resize(width, height), cx);
+                Ok(json!({ "width": width, "height": height }))
+            }
+            ControlRequest::Show => {
+                self.request_window(WindowCommand::Activate, cx);
+                Ok(json!({ "visible": true }))
+            }
+            ControlRequest::Hide => {
+                self.request_window(WindowCommand::Minimize, cx);
+                Ok(json!({ "visible": false }))
+            }
+        }
+    }
+
+    fn is_known_command(&self, id: &str) -> bool {
+        if let Some(device) = id.strip_prefix("audio-device:") {
+            return !device.is_empty();
+        }
+        if let Some(key) = id.strip_prefix("pixel-shader:") {
+            return key.is_empty() || crate::shaders::spec(key).is_some();
+        }
+        if let Some(key) = id.strip_prefix("ass-engine:") {
+            return crate::subtitle_engine::normalize(key) == key;
+        }
+        if id == "hdr-tone-map-toggle" || id == "hdr-metadata-toggle" || id == "whisper-generate" {
+            return true;
+        }
+        if let Some(key) = id.strip_prefix("tone-mapping:") {
+            return crate::hdr::normalize_curve(key) == key;
+        }
+        if let Some(value) = id.strip_prefix("peak:") {
+            return value.parse::<u32>().is_ok();
+        }
+        if let Some(index) = id.strip_prefix("chapter:") {
+            return index.parse::<usize>().is_ok();
+        }
+        if let Some(value) = id.strip_prefix("speed:") {
+            return value.parse::<f64>().is_ok_and(|speed| speed > 0.0);
+        }
+        if let Some(value) = id.strip_prefix("hold-speed:") {
+            return parse_hold_speed_action(value).is_some();
+        }
+        if let Some(index) = id
+            .strip_prefix("track:a:")
+            .or_else(|| id.strip_prefix("track:s:"))
+        {
+            return index == "no" || index.parse::<i64>().is_ok();
+        }
+        crate::menu::collect_actions(&self.menu)
+            .iter()
+            .any(|action| action == id)
+            || crate::menu::EXTRA_ACTIONS
+                .iter()
+                .any(|action| *action == id)
     }
 
     fn view_fingerprint(&self, cx: &App) -> String {
@@ -486,6 +808,114 @@ impl PlayerFrameController {
         cx.notify();
     }
 
+    pub(crate) fn is_holding_right(&self) -> bool {
+        matches!(
+            self.hold_speed,
+            Some(HoldSpeed {
+                button: HoldButton::Right,
+                ..
+            })
+        )
+    }
+
+    pub fn begin_hold_speed(&mut self, button: HoldButton, cx: &mut Context<Self>) -> bool {
+        if self.hold_speed.is_some() {
+            return false;
+        }
+        let speed = match button {
+            HoldButton::Left => self.config.hold_left_speed,
+            HoldButton::Right => self.config.hold_right_speed,
+            HoldButton::Middle => self.config.hold_middle_speed,
+        };
+        if speed <= 0.0 {
+            return false;
+        }
+        let previous = {
+            let playback = self.playback.read(cx);
+            if !playback.is_loaded() {
+                return false;
+            }
+            playback.speed()
+        };
+        self.playback
+            .update(cx, |playback, cx| playback.set_speed(speed, cx));
+        self.hold_speed = Some(HoldSpeed {
+            button,
+            previous,
+            started: Instant::now(),
+        });
+        true
+    }
+
+    pub fn end_hold_speed(
+        &mut self,
+        button: HoldButton,
+        cx: &mut Context<Self>,
+    ) -> Option<Duration> {
+        let state = self.hold_speed.take()?;
+        if state.button != button {
+            self.hold_speed = Some(state);
+            return None;
+        }
+        self.playback
+            .update(cx, |playback, cx| playback.set_speed(state.previous, cx));
+        Some(state.started.elapsed())
+    }
+
+    pub fn finish_hold_speed(
+        &mut self,
+        button: MouseButton,
+        position: Point<Pixels>,
+        allow_menu: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let button = match button {
+            MouseButton::Left => HoldButton::Left,
+            MouseButton::Right => HoldButton::Right,
+            MouseButton::Middle => HoldButton::Middle,
+            _ => return,
+        };
+        let Some(held) = self.end_hold_speed(button, cx) else {
+            return;
+        };
+        if allow_menu && button == HoldButton::Right && held < Duration::from_millis(250) {
+            self.open_menu_at(f32::from(position.x), f32::from(position.y), cx);
+        }
+    }
+
+    pub(crate) fn release_hold_speed(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.hold_speed.take() else {
+            return;
+        };
+        self.playback
+            .update(cx, |playback, cx| playback.set_speed(state.previous, cx));
+    }
+
+    fn set_hold_speed(&mut self, button: &str, speed: f64, cx: &mut Context<Self>) {
+        if !flint_core::config::is_hold_speed_preset(speed) {
+            return;
+        }
+        match button {
+            "left" => self.config.hold_left_speed = speed,
+            "right" => self.config.hold_right_speed = speed,
+            "middle" => self.config.hold_middle_speed = speed,
+            _ => return,
+        }
+        self.save_config();
+        self.rebuild_menu(cx);
+        let label = if speed == 0.0 {
+            "不使用".to_string()
+        } else {
+            format!("按下时以 {speed} 倍速度播放")
+        };
+        let name = match button {
+            "left" => "左键",
+            "right" => "右键",
+            _ => "中键(滚轮)",
+        };
+        self.show_notice(format!("按住{name}时：{label}"), cx);
+    }
+
     pub fn handle_action(&mut self, action: String, cx: &mut Context<Self>) {
         match action.as_str() {
             "open-file" => self.prompt_open_file(cx),
@@ -539,6 +969,39 @@ impl PlayerFrameController {
                     format!("声音输出设备：{device}"),
                     cx,
                 );
+            }
+            "pixel-shader-cycle" => {
+                let next = crate::shaders::next(&self.config.pixel_shader).to_string();
+                self.apply_pixel_shader(next, cx);
+            }
+            action if action.starts_with("pixel-shader:") => {
+                let key = action["pixel-shader:".len()..].to_string();
+                self.apply_pixel_shader(key, cx);
+            }
+            action if action.starts_with("ass-engine:") => {
+                let key = action["ass-engine:".len()..].to_string();
+                self.apply_ass_engine(key, cx);
+            }
+            "hdr-tone-map-toggle" => {
+                self.config.hdr_tone_map = !self.config.hdr_tone_map;
+                self.apply_hdr_settings(cx);
+            }
+            "hdr-metadata-toggle" => {
+                self.config.hdr_metadata = !self.config.hdr_metadata;
+                self.apply_hdr_settings(cx);
+            }
+            "whisper-generate" => self.generate_whisper(cx),
+            action if action.starts_with("tone-mapping:") => {
+                let key = action["tone-mapping:".len()..].to_string();
+                self.config.tone_mapping = crate::hdr::normalize_curve(&key).to_string();
+                self.apply_hdr_settings(cx);
+            }
+            action if action.starts_with("peak:") => {
+                let Ok(peak) = action["peak:".len()..].parse::<u32>() else {
+                    return;
+                };
+                self.config.target_peak = if peak == 0 { 0 } else { peak.clamp(100, 2000) };
+                self.apply_hdr_settings(cx);
             }
             "toggle-sidebar" => self.toggle_sidebar(cx),
             "seek-start" => self
@@ -1029,7 +1492,12 @@ impl PlayerFrameController {
         let modifiers = event.keystroke.modifiers;
         if key == "escape" {
             if self.settings.read(cx).is_open() {
-                self.settings.update(cx, |settings, cx| settings.close(cx));
+                let closed =
+                    self.settings
+                        .update(cx, |settings, cx| settings.close_dropdown(cx));
+                if !closed {
+                    self.settings.update(cx, |settings, cx| settings.close(cx));
+                }
                 return;
             }
             if self.menu_open {
@@ -1155,6 +1623,12 @@ impl PlayerFrameController {
             if let Ok(speed) = value.parse::<f64>() {
                 self.playback
                     .update(cx, |playback, cx| playback.set_speed(speed, cx));
+                return;
+            }
+        }
+        if let Some(value) = action.strip_prefix("hold-speed:") {
+            if let Some((button, speed)) = parse_hold_speed_action(value) {
+                self.set_hold_speed(&button, speed, cx);
                 return;
             }
         }
@@ -1959,6 +2433,7 @@ impl PlayerFrameController {
         if text.is_empty() {
             return;
         }
+        self.open_generation = self.open_generation.wrapping_add(1);
         let path = std::path::PathBuf::from(text);
         if path.is_dir() {
             self.open_folder(&path, cx);
@@ -1969,11 +2444,69 @@ impl PlayerFrameController {
             self.open_media(&path, cx);
             return;
         }
+        if text.contains("://") && !self.extensions.is_empty() {
+            self.resolve_playlist_extension(text.to_string(), cx);
+            return;
+        }
+        self.open_remote_source(text, cx);
+    }
+
+    fn open_remote_source(&mut self, text: &str, cx: &mut Context<Self>) {
+        let path = std::path::PathBuf::from(text);
         self.playlist
             .update(cx, |playlist, _| playlist.add_files(vec![path.clone()]));
         self.sync_playlist(cx);
         self.open_media(&path, cx);
         self.show_notice(crate::i18n::trf("打开链接：{text}", &[&text]), cx);
+    }
+
+    fn resolve_playlist_extension(&mut self, url: String, cx: &mut Context<Self>) {
+        let fallback = url.clone();
+        let extensions = self.extensions.clone();
+        let generation = self.open_generation;
+        let request = serde_json::json!({ "url": url });
+        let task = cx.background_executor().spawn(async move {
+            crate::extensions::run_hook("playlist-parse", request, &extensions)
+                .and_then(|response| crate::extensions::parse_playlist(&response))
+        });
+        let this = cx.entity().downgrade();
+        cx.spawn(async move |_this, cx| {
+            let items = task.await;
+            let _ = this.update(cx, |this, cx| {
+                if this.open_generation != generation {
+                    return;
+                }
+                match items {
+                    Ok(items) if !items.is_empty() => {
+                        this.apply_playlist_extension(&items, cx)
+                    }
+                    Ok(_) => this.open_remote_source(&fallback, cx),
+                    Err(error) => {
+                        this.open_remote_source(&fallback, cx);
+                        this.show_notice(
+                            crate::i18n::trf("扩展解析失败：{error}（已直接打开）", &[&error]),
+                            cx,
+                        );
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn apply_playlist_extension(&mut self, items: &[(String, String)], cx: &mut Context<Self>) {
+        let urls: Vec<std::path::PathBuf> = items
+            .iter()
+            .map(|(_, url)| std::path::PathBuf::from(url))
+            .collect();
+        self.playlist
+            .update(cx, |playlist, _| playlist.add_files(urls.clone()));
+        self.sync_playlist(cx);
+        if let Some(first) = urls.first() {
+            self.open_media(first, cx);
+        }
+        let count = items.len().to_string();
+        self.show_notice(crate::i18n::trf("扩展解析出 {count} 个播放项", &[&count]), cx);
     }
 
     fn set_default_open_action(&mut self, mode: &str, cx: &mut Context<Self>) {
@@ -2591,31 +3124,11 @@ impl PlayerFrameController {
     }
 
     fn prompt_config_manager(&mut self, cx: &mut Context<Self>) {
-        let directory = flint_core::config::config_dir().join("profiles");
-        let _ = std::fs::create_dir_all(&directory);
-        let mut rows: Vec<(String, std::path::PathBuf)> = std::fs::read_dir(&directory)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| {
-                let path = entry.path();
-                (path.extension().and_then(|value| value.to_str()) == Some("ini")).then(|| {
-                    (
-                        path.file_stem()
-                            .map(|stem| stem.to_string_lossy().to_string())
-                            .unwrap_or_default(),
-                        path,
-                    )
-                })
-            })
-            .collect();
-        rows.sort_by(|left, right| left.0.cmp(&right.0));
+        flint_core::config::migrate_legacy_profiles();
+        let names = flint_core::config::list_profiles();
         const SAVE_ROW: &str = "＋ 保存当前配置...";
         const DELETE_ROW: &str = "🗑 删除配置...";
-        let mut cells: Vec<Vec<String>> = rows
-            .iter()
-            .map(|(name, _)| vec![name.clone()])
-            .collect();
+        let mut cells: Vec<Vec<String>> = names.iter().map(|name| vec![name.clone()]).collect();
         cells.push(vec![SAVE_ROW.to_string()]);
         cells.push(vec![DELETE_ROW.to_string()]);
         let listing = cx
@@ -2633,10 +3146,15 @@ impl PlayerFrameController {
                 let _ = this.update(cx, |this, cx| this.prompt_save_profile(cx));
             } else if name == DELETE_ROW {
                 let _ = this.update(cx, |this, cx| this.delete_profile(cx));
-            } else if let Some((_, path)) = rows.iter().find(|(profile, _)| profile == name) {
-                let path = path.clone();
-                let config = Config::load_from(&path);
-                let _ = this.update(cx, |this, cx| this.apply_config(config, cx));
+            } else if let Some(path) = flint_core::config::profile_config_path(name)
+                .filter(|path| path.is_file())
+            {
+                let name = name.clone();
+                let _ = this.update(cx, |this, cx| {
+                    flint_core::config::set_profile(Some(name.as_str()));
+                    let config = Config::load_from(&path);
+                    this.apply_config(config, cx);
+                });
             }
         })
         .detach();
@@ -2652,19 +3170,11 @@ impl PlayerFrameController {
                 return;
             };
             let _ = this.update(cx, |this, cx| {
-                let directory = flint_core::config::config_dir().join("profiles");
-                let _ = std::fs::create_dir_all(&directory);
-                let safe: String = name
-                    .chars()
-                    .map(|value| {
-                        if value.is_alphanumeric() || value == '-' || value == '_' {
-                            value
-                        } else {
-                            '_'
-                        }
-                    })
-                    .collect();
-                let path = directory.join(format!("{safe}.ini"));
+                let name = name.trim().to_string();
+                let Some(path) = flint_core::config::profile_config_path(&name) else {
+                    this.show_notice("配置名称只能包含字母、数字、空格、- 和 _，最长 32 个字符", cx);
+                    return;
+                };
                 match this.config.save_to(&path) {
                     Ok(()) => this.show_notice(crate::i18n::trf("已保存配置：{name}", &[&name]), cx),
                     Err(error) => this.show_notice(crate::i18n::trf("保存配置失败：{error}", &[&error]), cx),
@@ -2675,18 +3185,8 @@ impl PlayerFrameController {
     }
 
     fn delete_profile(&mut self, cx: &mut Context<Self>) {
-        let directory = flint_core::config::config_dir().join("profiles");
-        let names: Vec<String> = std::fs::read_dir(&directory)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| {
-                let path = entry.path();
-                (path.extension().and_then(|value| value.to_str()) == Some("ini"))
-                    .then(|| path.file_stem().map(|stem| stem.to_string_lossy().to_string()))
-                    .flatten()
-            })
-            .collect();
+        flint_core::config::migrate_legacy_profiles();
+        let names = flint_core::config::list_profiles();
         if names.is_empty() {
             self.show_notice("没有可删除的配置", cx);
             return;
@@ -2706,12 +3206,23 @@ impl PlayerFrameController {
             let Some(name) = selected.first() else {
                 return;
             };
-            let path = flint_core::config::config_dir()
-                .join("profiles")
-                .join(format!("{name}.ini"));
-            let result = std::fs::remove_file(&path);
+            let was_active =
+                flint_core::config::active_profile().as_deref() == Some(name.as_str());
+            let result = match flint_core::config::profile_config_path(name) {
+                Some(path) => path
+                    .parent()
+                    .map(std::fs::remove_dir_all)
+                    .unwrap_or(Ok(())),
+                None => Ok(()),
+            };
             let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => this.show_notice(crate::i18n::trf("已删除配置：{name}", &[&name]), cx),
+                Ok(()) => {
+                    if was_active {
+                        flint_core::config::set_profile(None);
+                        this.apply_config(Config::load(), cx);
+                    }
+                    this.show_notice(crate::i18n::trf("已删除配置：{name}", &[&name]), cx);
+                }
                 Err(error) => this.show_notice(crate::i18n::trf("删除配置失败：{error}", &[&error]), cx),
             });
         })
@@ -2735,11 +3246,26 @@ impl PlayerFrameController {
             fov: self.config.pano_fov.to_radians(),
         });
         crate::i18n::set_language(crate::i18n::Language::from_code(&self.config.language));
+        let shader = self.config.pixel_shader.clone();
+        let ass_engine = self.config.ass_output_engine.clone();
+        let hdr = (
+            self.config.tone_mapping.clone(),
+            self.config.target_peak,
+            self.config.hdr_tone_map,
+            self.config.hdr_metadata,
+        );
         self.playback.update(cx, |playback, cx| {
             playback.set_stereo(stereo, cx);
             playback.set_pano(pano, cx);
+            playback.set_pixel_shader(&shader);
+            playback.set_ass_engine(&ass_engine);
+            playback.set_hdr_settings(&hdr.0, hdr.1, hdr.2, hdr.3);
         });
         self.apply_image(cx);
+        self.sync_pixel_shader_checks();
+        self.sync_ass_engine_checks();
+        self.sync_hdr_checks();
+        self.rebuild_menu(cx);
         self.show_notice("已载入配置", cx);
     }
 
@@ -2804,7 +3330,7 @@ impl PlayerFrameController {
         if !enabled {
             let _ = self
                 .playback
-                .update(cx, |playback, _| playback.try_command("vf clr"));
+                .update(cx, |playback, _| playback.set_vapoursynth(None));
             self.show_notice(crate::i18n::trf("{name} 滤镜：关", &[&name]), cx);
             return;
         }
@@ -2816,10 +3342,9 @@ impl PlayerFrameController {
             self.show_notice("当前 libmpv 不支持 AviSynth，脚本已记录", cx);
             return;
         }
-        let command = format!("vf set vapoursynth={script}");
         let result = self
             .playback
-            .update(cx, |playback, _| playback.try_command(&command));
+            .update(cx, |playback, _| playback.set_vapoursynth(Some(&script)));
         match result {
             Ok(()) => self.show_notice(crate::i18n::trf("{name} 滤镜：开", &[&name]), cx),
             Err(error) => self.show_notice(crate::i18n::trf("{name} 滤镜加载失败：{error}", &[&name, &error]), cx),
@@ -2890,14 +3415,18 @@ impl PlayerFrameController {
                 tracks: playback.tracks(),
                 devices: flint_core::device::scan_devices(),
                 speed: playback.speed(),
+                hold_left_speed: self.config.hold_left_speed,
+                hold_right_speed: self.config.hold_right_speed,
+                hold_middle_speed: self.config.hold_middle_speed,
                 repeat: self.repeat,
                 shuffle: self.shuffle,
                 remember_position: self.remember_position,
                 has_prev: playlist.has_prev(self.shuffle),
                 has_next: playlist.has_next(),
+                whisper: crate::whisper::available(),
             }
         };
-        self.menu = menu::main_menu();
+        self.menu = menu::load_menu();
         apply_dynamic(&mut self.menu, &data);
         menu::set_checked_all(&mut self.menu, "toggle-sidebar", self.sidebar_open);
         let aspect = self.playback.read(cx).aspect().to_string();
@@ -2924,7 +3453,9 @@ impl PlayerFrameController {
             "osd-playback",
             self.osd_mode == Some(OsdMode::Playback),
         );
-        menu::set_checked_all(&mut self.menu, "flip-horizontal", self.flip_horizontal);
+        self.sync_pixel_shader_checks();
+        self.sync_ass_engine_checks();
+        self.sync_hdr_checks();
         menu::set_checked_all(&mut self.menu, "flip-vertical", self.flip_vertical);
         menu::set_checked_all(&mut self.menu, "snapshot-play-folder-toggle", self.config.snapshot_play_folder);
         let stereo = self.playback.read(cx).stereo().key().to_string();
@@ -3112,8 +3643,155 @@ impl PlayerFrameController {
     }
 
     pub fn quit(&mut self, cx: &mut Context<Self>) {
+        self.release_hold_speed(cx);
         self.remember_current_position(cx);
         cx.quit();
+    }
+
+    fn sync_pixel_shader_checks(&mut self) {
+        menu::set_checked_all(&mut self.menu, "pixel-shader:", self.config.pixel_shader.is_empty());
+        for spec in crate::shaders::SHADERS {
+            let action = format!("pixel-shader:{}", spec.key);
+            menu::set_checked_all(&mut self.menu, &action, self.config.pixel_shader == spec.key);
+        }
+    }
+
+    fn apply_pixel_shader(&mut self, key: String, cx: &mut Context<Self>) {
+        self.playback
+            .update(cx, |playback, _| playback.set_pixel_shader(&key));
+        self.config.pixel_shader = key;
+        self.save_config();
+        self.sync_pixel_shader_checks();
+        let label = crate::shaders::label(&self.config.pixel_shader).to_string();
+        self.show_notice(format!("像素着色：{label}"), cx);
+    }
+
+    fn sync_ass_engine_checks(&mut self) {
+        let current = crate::subtitle_engine::normalize(&self.config.ass_output_engine);
+        for (key, _, _) in crate::subtitle_engine::MODES {
+            let action = format!("ass-engine:{key}");
+            menu::set_checked_all(&mut self.menu, &action, current == key);
+        }
+    }
+
+    fn apply_ass_engine(&mut self, key: String, cx: &mut Context<Self>) {
+        let key = crate::subtitle_engine::normalize(&key).to_string();
+        self.playback
+            .update(cx, |playback, _| playback.set_ass_engine(&key));
+        self.config.ass_output_engine = key;
+        self.save_config();
+        self.sync_ass_engine_checks();
+        self.show_notice(
+            format!(
+                "ASS/SSA 输出引擎：{}",
+                crate::subtitle_engine::label(&self.config.ass_output_engine)
+            ),
+            cx,
+        );
+    }
+
+    fn generate_whisper(&mut self, cx: &mut Context<Self>) {
+        let media = {
+            let playlist = self.playlist.read(cx);
+            playlist
+                .current()
+                .and_then(|index| playlist.items().get(index).cloned())
+        };
+        let Some(media) = media else {
+            self.show_notice("没有正在播放的文件", cx);
+            return;
+        };
+        if !crate::whisper::available() {
+            self.show_notice(
+                format!(
+                    "未找到 whisper 引擎或模型：引擎放到 PATH，模型 *.bin 放到 {}",
+                    crate::whisper::models_dir().display()
+                ),
+                cx,
+            );
+            return;
+        }
+        let stem = media
+            .file_stem()
+            .map(|value| value.to_string_lossy().to_string())
+            .unwrap_or_else(|| "subtitles".to_string());
+        let output = media.with_file_name(format!("{stem}.whisper.srt"));
+        let target = output.clone();
+        self.show_notice(format!("正在生成字幕：{}", output.display()), cx);
+        let job = cx
+            .background_executor()
+            .spawn(async move { crate::whisper::transcribe(&media, &target) });
+        let this = cx.entity().downgrade();
+        cx.spawn(async move |_this, cx| {
+            let result = job.await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(()) => {
+                    let escaped = output.display().to_string().replace('\\', "\\\\");
+                    let command = format!("sub-add \"{escaped}\" select");
+                    this.playback
+                        .update(cx, |playback, cx| playback.command(&command, cx));
+                    this.show_notice(
+                        crate::i18n::trf("已载入字幕：{}", &[&output.display()]),
+                        cx,
+                    );
+                }
+                Err(error) => {
+                    this.show_notice(crate::i18n::trf("生成字幕失败：{error}", &[&error]), cx)
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn sync_hdr_checks(&mut self) {
+        let current = crate::hdr::normalize_curve(&self.config.tone_mapping);
+        for (key, _) in crate::hdr::CURVES {
+            let action = format!("tone-mapping:{key}");
+            menu::set_checked_all(&mut self.menu, &action, current == key);
+        }
+        for peak in [0u32, 100, 200, 300, 500, 1000] {
+            let action = format!("peak:{peak}");
+            menu::set_checked_all(&mut self.menu, &action, self.config.target_peak == peak);
+        }
+        menu::set_checked_all(&mut self.menu, "hdr-tone-map-toggle", self.config.hdr_tone_map);
+        menu::set_checked_all(&mut self.menu, "hdr-metadata-toggle", self.config.hdr_metadata);
+    }
+
+    fn apply_hdr_settings(&mut self, cx: &mut Context<Self>) {
+        self.config.tone_mapping =
+            crate::hdr::normalize_curve(&self.config.tone_mapping).to_string();
+        self.config.target_peak = if self.config.target_peak == 0 {
+            0
+        } else {
+            self.config.target_peak.clamp(100, 2000)
+        };
+        let tone_mapping = self.config.tone_mapping.clone();
+        let target_peak = self.config.target_peak;
+        let tone_map = self.config.hdr_tone_map;
+        let metadata = self.config.hdr_metadata;
+        self.playback.update(cx, |playback, _| {
+            playback.set_hdr_settings(&tone_mapping, target_peak, tone_map, metadata)
+        });
+        self.save_config();
+        self.sync_hdr_checks();
+        let mut parts = Vec::new();
+        if tone_map {
+            parts.push("HDR SMPTE ST 2084 自动校正".to_string());
+        }
+        if metadata {
+            parts.push("HDR SMPTE ST 2086 自动校正".to_string());
+        }
+        let peak = if target_peak == 0 {
+            "自动".to_string()
+        } else {
+            format!("{target_peak} 尼特")
+        };
+        parts.push(format!(
+            "色调映射类型：{}",
+            crate::hdr::label(&tone_mapping)
+        ));
+        parts.push(format!("源峰值亮度：{peak}"));
+        self.show_notice(parts.join("　"), cx);
     }
 
     pub fn show_notice(&mut self, notice: impl Into<String>, cx: &mut Context<Self>) {
@@ -3198,11 +3876,7 @@ impl PlayerFrameController {
         if self.flip_vertical {
             filters.push("vflip");
         }
-        let filter_command = if filters.is_empty() {
-            "vf clr".to_string()
-        } else {
-            format!("vf set {}", filters.join(","))
-        };
+        let flip_filters = filters.join(",");
         let values = [
             ("brightness", self.brightness.to_string()),
             ("contrast", self.contrast.to_string()),
@@ -3217,7 +3891,7 @@ impl PlayerFrameController {
             for (name, value) in &values {
                 playback.set_property(name, value, cx);
             }
-            playback.command(&filter_command, cx);
+            let _ = playback.set_flip_filters(&flip_filters);
         });
         cx.notify();
     }
@@ -3740,6 +4414,15 @@ fn post_action_label(action: &str) -> &'static str {
     }
 }
 
+fn parse_hold_speed_action(value: &str) -> Option<(String, f64)> {
+    let (button, speed) = value.split_once(':')?;
+    if !matches!(button, "left" | "right" | "middle") {
+        return None;
+    }
+    let speed = speed.parse::<f64>().ok()?;
+    flint_core::config::is_hold_speed_preset(speed).then(|| (button.to_string(), speed))
+}
+
 fn format_clock(seconds: f64) -> String {
     if !seconds.is_finite() || seconds <= 0.0 {
         return "00:00".to_string();
@@ -3763,8 +4446,29 @@ fn parse_clock(text: &str) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_shortcut;
+    use super::{parse_hold_speed_action, parse_shortcut};
     use crate::menu;
+
+    #[test]
+    fn parses_hold_speed_actions() {
+        assert_eq!(
+            parse_hold_speed_action("left:3"),
+            Some(("left".to_string(), 3.0))
+        );
+        assert_eq!(
+            parse_hold_speed_action("right:0.5"),
+            Some(("right".to_string(), 0.5))
+        );
+        assert_eq!(
+            parse_hold_speed_action("middle:0"),
+            Some(("middle".to_string(), 0.0))
+        );
+        assert!(parse_hold_speed_action("middle:1").is_none());
+        assert!(parse_hold_speed_action("side:2").is_none());
+        assert!(parse_hold_speed_action("left").is_none());
+        assert!(parse_hold_speed_action("left:x").is_none());
+        assert!(parse_hold_speed_action("left:3:4").is_none());
+    }
 
     #[test]
     fn parses_modifiers_and_keys() {
@@ -3807,5 +4511,6 @@ mod tests {
         assert_eq!(action("Alt+Enter"), Some("fullscreen"));
         assert_eq!(action("Ctrl+P"), Some("flip-vertical"));
         assert_eq!(action("Alt+K"), Some("rotate-cycle"));
+        assert_eq!(action("Shift+P"), Some("pixel-shader-cycle"));
     }
 }

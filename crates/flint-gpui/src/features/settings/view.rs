@@ -128,7 +128,9 @@ pub fn settings_overlay(
         .on_click({
             let settings = settings.clone();
             move |_, _, cx: &mut App| {
-                settings.update(cx, |settings, cx| settings.close(cx));
+                if !settings.update(cx, |settings, cx| settings.close_dropdown(cx)) {
+                    settings.update(cx, |settings, cx| settings.close(cx));
+                }
             }
         });
 
@@ -375,7 +377,21 @@ pub fn settings_overlay(
         .child(cancel)
         .child(open_device);
     if let Some(popup) = popup {
-        panel = panel.child(popup);
+        let dismiss = div()
+            .id("settings-dismiss")
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .occlude()
+            .on_click({
+                let settings = settings.clone();
+                move |_, _, cx: &mut App| {
+                    settings.update(cx, |settings, cx| settings.close_dropdown(cx));
+                }
+            });
+        panel = panel.child(dismiss).child(popup);
     }
 
     div()
@@ -938,7 +954,7 @@ fn audio_popup(
     div()
         .absolute()
         .left(px(108.0))
-        .top(px(114.0))
+        .top(px(170.0))
         .w(px(WIDTH))
         .h(px(full_height.min(360.0)))
         .id("settings-audio-popup")

@@ -33,12 +33,12 @@ pub fn playlist_panel(
         .px_2()
         .bg(rgb(0x252525))
         .border_b_1()
-        .border_color(rgb(theme::PANEL_BORDER))
+        .border_color(rgb(theme::panel_border()))
         .child(
             div()
                 .flex_1()
                 .text_size(px(12.0))
-                .text_color(rgb(theme::TITLEBAR_TEXT))
+                .text_color(rgb(theme::titlebar_text()))
                 .child(format!("播放列表 · {count}")),
         )
         .child(
@@ -50,9 +50,9 @@ pub fn playlist_panel(
                 .items_center()
                 .justify_center()
                 .rounded(px(3.0))
-                .text_color(rgb(theme::TITLEBAR_TEXT_DIM))
+                .text_color(rgb(theme::titlebar_text_dim()))
                 .child("✕")
-                .hover(|style| style.bg(rgb(theme::CONTROL_BAR_HOVER)))
+                .hover(|style| style.bg(rgb(theme::control_bar_hover())))
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx))),
         );
 
@@ -61,7 +61,7 @@ pub fn playlist_panel(
             .px_3()
             .pt_3()
             .text_size(px(12.0))
-            .text_color(rgb(theme::MENU_TEXT_DIM))
+            .text_color(rgb(theme::menu_text_dim()))
             .child("播放列表为空")
             .into_any_element()]
     } else {
@@ -70,7 +70,7 @@ pub fn playlist_panel(
             .map(|(index, name)| {
                 let selected = current == Some(index);
                 let background = if selected {
-                    theme::MENU_HOVER
+                    theme::menu_hover()
                 } else {
                     0x2d2d2d
                 };
@@ -85,11 +85,11 @@ pub fn playlist_panel(
                     .bg(rgb(background))
                     .text_size(px(12.0))
                     .text_color(rgb(if selected {
-                        theme::ACCENT
+                        theme::accent()
                     } else {
-                        theme::MENU_TEXT
+                        theme::menu_text()
                     }))
-                    .hover(|style| style.bg(rgb(theme::TITLEBAR_HOVER)))
+                    .hover(|style| style.bg(rgb(theme::titlebar_hover())))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.open_playlist_index(index, cx);
                     }))
@@ -97,7 +97,7 @@ pub fn playlist_panel(
                         div()
                             .w(px(30.0))
                             .flex_shrink_0()
-                            .text_color(rgb(theme::MENU_TEXT_DIM))
+                            .text_color(rgb(theme::menu_text_dim()))
                             .child(format!("{index:02}")),
                     )
                     .child(div().flex_1().truncate().child(name))
@@ -114,7 +114,7 @@ pub fn playlist_panel(
         .flex_col()
         .bg(rgb(0x2d2d2d))
         .border_l_1()
-        .border_color(rgb(theme::TITLEBAR_BG))
+        .border_color(rgb(theme::titlebar_bg()))
         .child(header)
         .child(
             div()

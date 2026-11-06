@@ -20,6 +20,8 @@ gpui-kit = { git = "https://github.com/nyakang/gpui-kit", rev = "9143df9774d0190
 log.workspace = true
 image.workspace = true
 x11rb = "0.13"
+serde_json = "1"
+roxmltree = "0.21"
 env_logger.workspace = true
 libc.workspace = true
 

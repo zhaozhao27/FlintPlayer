@@ -39,6 +39,10 @@ pub struct PlayerState {
     pub volume: f64,
     /// Whether a file is currently loaded.
     pub loaded: bool,
+    /// Video gamma reported by mpv (`pq`, `hlg`, or a transfer function name).
+    pub video_gamma: String,
+    /// Mastering peak luminance in nits reported by mpv, 0.0 when unknown.
+    pub sig_peak: f64,
     /// Last playback error reported by mpv, if any.
     pub error: Option<String>,
 }
@@ -597,6 +601,17 @@ fn poll_properties(api: &MpvApi, handle: *mut MpvHandle, state: &mut PlayerState
     }
     if let Some(title) = get_property_string(api, handle, "media-title") {
         state.title = title;
+    }
+    if state.loaded {
+        if let Some(gamma) = get_property_string(api, handle, "video-params/gamma") {
+            state.video_gamma = gamma;
+        }
+        if let Some(peak) = get_f64(api, handle, "video-params/sig-peak") {
+            state.sig_peak = peak;
+        }
+    } else {
+        state.video_gamma.clear();
+        state.sig_peak = 0.0;
     }
 }
 

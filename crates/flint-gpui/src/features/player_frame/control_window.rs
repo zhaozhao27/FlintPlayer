@@ -132,7 +132,7 @@ pub fn control_window(
         .id("control-window")
         .absolute()
         .right(px(8.0))
-        .bottom(px(theme::CONTROL_BAR_HEIGHT + 6.0))
+        .bottom(px(theme::control_bar_height() + 6.0))
         .w(px(PANEL_WIDTH))
         .h(px(PANEL_HEIGHT))
         .bg(rgb(PANEL_BG))

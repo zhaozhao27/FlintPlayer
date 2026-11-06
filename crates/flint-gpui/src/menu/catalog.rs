@@ -1,3 +1,4 @@
+use super::generated;
 use super::MenuEntry;
 
 pub fn main_menu() -> Vec<MenuEntry> {
@@ -69,8 +70,11 @@ pub fn main_menu() -> Vec<MenuEntry> {
             MenuEntry::action("上一帧", "step-backward").with_shortcut(","),
             MenuEntry::action("下一帧", "step-forward").with_shortcut("."),
         ]),
-    ]),
-    MenuEntry::submenu("字幕", Vec::new()).disabled(),
+    ])
+    .dynamic("play"),
+    MenuEntry::submenu("字幕", generated::ass_engines())
+        .dynamic("subtitle")
+        .generated("ass-engines"),
     MenuEntry::submenu("视频", vec![
         MenuEntry::submenu("选择图像", vec![
             MenuEntry::action("图像顺序选择", "panel-cycle").with_shortcut("Alt+V"),
@@ -96,22 +100,7 @@ pub fn main_menu() -> Vec<MenuEntry> {
             MenuEntry::action("空视频渲染器(压缩)", "renderer-null-compressed"),
             MenuEntry::action("空视频渲染器(未压缩)", "renderer-null-uncompressed"),
         ]),
-        MenuEntry::submenu("像素着色", vec![
-            MenuEntry::action("调整尺寸前的着色切换", "").with_shortcut("Shift+P").disabled(),
-            MenuEntry::action("    不使用", "").disabled(),
-            MenuEntry::action("    组合", "").disabled(),
-            MenuEntry::action("    组合编辑...", "").disabled(),
-            MenuEntry::action("调整尺寸后的着色切换", "").with_shortcut("Ctrl+Alt+P").disabled(),
-            MenuEntry::action("    不使用", "").disabled(),
-            MenuEntry::action("    组合", "").disabled(),
-            MenuEntry::action("    组合编辑...", "").disabled(),
-            MenuEntry::action("重载着色文件", "").disabled(),
-            MenuEntry::action("打开着色文件夹", "").disabled(),
-            MenuEntry::action("显示器色域校正(ICC)", "").disabled(),
-            MenuEntry::action("YCgCo 色彩空间自动校正", "").disabled(),
-            MenuEntry::action("HDR SMPTE ST 2084 自动校正", "").disabled(),
-            MenuEntry::action("HDR SMPTE ST 2086 自动校正", "").disabled(),
-        ]),
+        MenuEntry::submenu("像素着色", generated::pixel_shaders()).generated("pixel-shaders"),
         MenuEntry::action("3D 视频输出", "stereo-cycle").with_shortcut("J"),
         MenuEntry::action("    关闭 3D 输出", "stereo-off"),
         MenuEntry::action("    红蓝立体（左右并排）", "stereo-anaglyph-sbs"),
@@ -254,7 +243,7 @@ pub fn main_menu() -> Vec<MenuEntry> {
         MenuEntry::action("色彩度 +1%", "").with_shortcut("O").disabled(),
         MenuEntry::action("视频输出设置...", "").disabled(),
     ]),
-    MenuEntry::submenu("声音", Vec::new()).disabled(),
+    MenuEntry::submenu("声音", Vec::new()).disabled().dynamic("sound"),
     MenuEntry::submenu("滤镜", Vec::new()).disabled(),
     MenuEntry::submenu("皮肤", Vec::new()).disabled(),
     MenuEntry::submenu("配置/语言/其他", vec![

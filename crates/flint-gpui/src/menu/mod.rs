@@ -1,8 +1,18 @@
 mod catalog;
 mod dynamic;
+mod generated;
+mod menufile;
 
 pub use catalog::main_menu;
-pub use dynamic::{apply_dynamic, MenuData};
+pub use dynamic::{apply_dynamic, MenuData, EXTRA_ACTIONS};
+
+pub fn load_menu() -> Vec<MenuEntry> {
+    menufile::load(&menufile::file_path()).unwrap_or_else(main_menu)
+}
+
+pub fn init() {
+    menufile::ensure_file();
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum EntryKind {
@@ -21,6 +31,8 @@ pub struct MenuEntry {
     pub icon: Option<String>,
     pub enabled: bool,
     pub checked: Option<bool>,
+    pub dynamic: Option<String>,
+    pub generated: Option<String>,
     pub children: Vec<MenuEntry>,
 }
 
@@ -77,6 +89,16 @@ impl MenuEntry {
         self
     }
 
+    pub fn dynamic(mut self, name: impl Into<String>) -> Self {
+        self.dynamic = Some(name.into());
+        self
+    }
+
+    pub fn generated(mut self, name: impl Into<String>) -> Self {
+        self.generated = Some(name.into());
+        self
+    }
+
     pub fn is_separator(&self) -> bool {
         self.kind == EntryKind::Separator
     }
@@ -117,6 +139,22 @@ pub fn collect_shortcuts(entries: &[MenuEntry]) -> Vec<(String, String)> {
             if let (Some(shortcut), Some(action)) = (&entry.shortcut, &entry.action) {
                 if !shortcut.is_empty() && !action.is_empty() {
                     out.push((shortcut.clone(), action.clone()));
+                }
+            }
+            walk(&entry.children, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(entries, &mut out);
+    out
+}
+
+pub fn collect_actions(entries: &[MenuEntry]) -> Vec<String> {
+    fn walk(entries: &[MenuEntry], out: &mut Vec<String>) {
+        for entry in entries {
+            if let Some(action) = &entry.action {
+                if !action.is_empty() && entry.enabled && !entry.is_submenu() {
+                    out.push(action.clone());
                 }
             }
             walk(&entry.children, out);
