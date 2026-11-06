@@ -93,7 +93,8 @@ cargo deb -p flintplayer-desktop
 官方发布包静态链接了 FFmpeg 6.1.2，不依赖系统的 FFmpeg 动态库，可在 glibc 2.36 及以上环境中运行：
 
 ```bash
-FFMPEG_DIR=/path/to/ffmpeg-static \
+scripts/build-static-ffmpeg.sh
+FFMPEG_DIR=target/ffmpeg-static \
   cargo build --release -p flintplayer-desktop --features static-ffmpeg
 cargo deb -p flintplayer-desktop --no-build
 ```
@@ -101,7 +102,7 @@ cargo deb -p flintplayer-desktop --no-build
 安装软件包：
 
 ```bash
-sudo apt install ./target/debian/flintplayer_1.0.0-1_amd64.deb
+sudo apt install ./target/debian/flintplayer_1.1.2-1_amd64.deb
 ```
 
 运行时依赖：`libmpv2 | libmpv1`、`libvulkan1`、`mesa-vulkan-drivers`、`fonts-noto-cjk`；建议同时安装 `zenity`、`ffmpeg`、`xdg-utils`，以支持文件对话框、缩略图生成和打开所在文件夹。
@@ -229,25 +230,18 @@ flintplayer [--size WxH] [--fps N] [--raw 输入格式] [--pix-fmt 像素格式]
 
 ## LGPL 合规
 
-FlintPlayer 官方发布包静态链接了 FFmpeg 6.1.2，FFmpeg 采用 LGPL-2.1-or-later 许可证。
+FlintPlayer 本身基于 MIT 许可证发布，详见 [LICENSE](LICENSE)。官方发布包静态链接了 FFmpeg 6.1.2，FFmpeg 采用 LGPL-2.1-or-later 许可证。
 
-- FFmpeg 源码：<https://ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz>
-- 静态编译参数：
+* **FFmpeg 源码归档**：<https://ffmpeg.org/releases/ffmpeg-6.1.2.tar.xz>
+* **内置子模块**：FFmpeg 6.1.2 已作为 Git 子模块固定在仓库的 `vendor/ffmpeg` 目录（对应 tag `n6.1.2`）。
+* **静态构建脚本**：仓库提供 `scripts/build-static-ffmpeg.sh` 脚本用于编译静态 FFmpeg。其源目录默认为 `vendor/ffmpeg`，安装前缀默认为 `target/ffmpeg-static`。该脚本会自动执行 `git submodule update --init --depth 1`，随后按照脚本内固定的配置参数执行 `configure`、`make` 和 `make install`，并在完成时打印 `FFMPEG_DIR=<prefix>`。
 
-  ```bash
-  ./configure --prefix=/path/to/ffmpeg-static --disable-autodetect \
-    --enable-static --disable-shared --enable-pic \
-    --enable-v4l2-m2m --enable-indev=v4l2
-  make -j"$(nproc)" && make install
-  ```
+如需自行构建静态链接版本的 FlintPlayer 或替换其中的 FFmpeg 库，请执行以下命令：
 
-- 重新链接：
-
-  ```bash
-  FFMPEG_DIR=/path/to/ffmpeg-static \
-    cargo build --release -p flintplayer-desktop --features static-ffmpeg
-  ```
+```bash
+git submodule update --init --depth 1
+scripts/build-static-ffmpeg.sh
+FFMPEG_DIR=target/ffmpeg-static cargo build --release -p flintplayer-desktop --features static-ffmpeg
+```
 
 如需获取目标文件或重链接脚本，请联系 <flint.lzzhang@ingenic.com>。
-
-FlintPlayer 本身基于 MIT 许可证发布，详见 [LICENSE](LICENSE)。

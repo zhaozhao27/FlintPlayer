@@ -92,3 +92,6 @@ kern-snap-*.txt
 /analysis-a.png
 /r1.png
 /r1-small.png
+
+# 发布产物（scripts/build-static-ffmpeg.sh 与 cargo deb 的输出）
+/dist/
