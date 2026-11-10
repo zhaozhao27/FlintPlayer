@@ -14,6 +14,7 @@ use crate::theme;
 const PANEL_WIDTH: f32 = 300.0;
 const PANEL_PADDING: f32 = 4.0;
 const SEPARATOR_HEIGHT: f32 = 9.0;
+const PANE_OSD_INSET: f32 = 8.0;
 
 fn menu_panel_height(entries: &[MenuEntry], row_height: f32) -> f32 {
     let rows = entries.iter().filter(|entry| !entry.is_separator()).count() as f32;
@@ -412,6 +413,9 @@ impl PlayerFrameController {
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
         let mode = self.osd_mode()?;
+        if mode == OsdMode::Full && self.capture_entities().len() > 1 {
+            return None;
+        }
         let width = (area_width - 36.0).max(0.0);
         let playback = self.playback.read(cx);
         let state = playback.state();
@@ -453,41 +457,8 @@ impl PlayerFrameController {
             OsdMode::Full => {
                 let text_size = (area_height * 0.03).min(area_width / 40.0).clamp(11.0, 30.0);
                 let capture = self.capture.read(cx);
-                let data = if let Some(info) = capture.info() {
-                    let stats = capture.stats().unwrap_or_default();
-                    let decoded = capture
-                        .decoded_pixel_format()
-                        .unwrap_or_else(|| info.pixel_format.to_lowercase());
-                    let (output_width, output_height) = capture
-                        .frame_size()
-                        .unwrap_or((info.width, info.height));
-                    osd::FullData::Capture(osd::CaptureData {
-                        label: capture.label(),
-                        clock: flint_core::sysinfo::local_hms(),
-                        timeline: osd::format_clock(capture.elapsed()),
-                        frames: stats.frames,
-                        cpu: self.cpu_percent(),
-                        codec: info.codec.clone(),
-                        pixel_format: info.pixel_format.clone(),
-                        width: info.width,
-                        height: info.height,
-                        nominal_fps: info.nominal_fps,
-                        bitrate_mbps: stats.bitrate_mbps,
-                        decoded,
-                        display_format: if capture.yuv_frame().is_some() {
-                            "NV12".to_string()
-                        } else {
-                            "RGBA".to_string()
-                        },
-                        output_width,
-                        output_height,
-                        actual_fps: stats.actual_fps,
-                        dropped: stats.dropped,
-                        drop_percent: stats.drop_percent,
-                        decode_ms: stats.decode_ms,
-                        latency_ms: capture.latency_ms(),
-                        audio_codec: None,
-                    })
+                let data = if let Some(data) = self.capture_full_data(capture) {
+                    data
                 } else {
                     let tracks = playback.tracks();
                     let video = tracks
@@ -521,9 +492,53 @@ impl PlayerFrameController {
                         audio_codec: audio.map(|track| track.codec.to_ascii_uppercase()),
                     })
                 };
-                Some(osd::full_osd(width, text_size, &data))
+                Some(osd::full_osd(
+                    width,
+                    text_size,
+                    osd::OSD_INSET,
+                    theme::titlebar_height() + osd::OSD_INSET,
+                    &data,
+                ))
             }
         }
+    }
+
+    fn capture_full_data(&self, capture: &capture::CaptureController) -> Option<osd::FullData> {
+        let info = capture.info()?;
+        let stats = capture.stats().unwrap_or_default();
+        let decoded = capture
+            .decoded_pixel_format()
+            .unwrap_or_else(|| info.pixel_format.to_lowercase());
+        let (output_width, output_height) = capture
+            .frame_size()
+            .unwrap_or((info.width, info.height));
+        Some(osd::FullData::Capture(osd::CaptureData {
+            label: capture.label(),
+            clock: flint_core::sysinfo::local_hms(),
+            timeline: osd::format_clock(capture.elapsed()),
+            frames: stats.frames,
+            cpu: self.cpu_percent(),
+            codec: info.codec.clone(),
+            pixel_format: info.pixel_format.clone(),
+            width: info.width,
+            height: info.height,
+            nominal_fps: info.nominal_fps,
+            bitrate_mbps: stats.bitrate_mbps,
+            decoded,
+            display_format: if capture.yuv_frame().is_some() {
+                "NV12".to_string()
+            } else {
+                "RGBA".to_string()
+            },
+            output_width,
+            output_height,
+            actual_fps: stats.actual_fps,
+            dropped: stats.dropped,
+            drop_percent: stats.drop_percent,
+            decode_ms: stats.decode_ms,
+            latency_ms: capture.latency_ms(),
+            audio_codec: None,
+        }))
     }
 
     fn render_analysis(&self, area_width: f32, cx: &Context<Self>) -> Option<AnyElement> {
@@ -642,6 +657,13 @@ impl Render for PlayerFrameController {
             self.config.capture_selections = selections;
             self.save_config();
         }
+        if let Some(split) = self
+            .settings
+            .update(cx, |settings, _| settings.take_split_update())
+        {
+            self.config.capture_split = split;
+            self.save_config();
+        }
         self.playback
             .update(cx, |playback, _| playback.upload_frame(window));
         self.capture
@@ -657,39 +679,14 @@ impl Render for PlayerFrameController {
             }
         };
 
-        let capturing = self.capture.read(cx).is_active();
-        let canvas = if capturing {
-            let entities = self.capture_entities();
-            if entities.len() <= 1 {
-                capture::view::video_canvas(&self.capture, cx)
-            } else {
-                let mut grid = div().size_full().flex().flex_col().gap(px(2.0));
-                for chunk in entities.chunks(2) {
-                    let mut row = div().flex_1().w_full().flex().gap(px(2.0));
-                    for entity in chunk {
-                        row = row.child(
-                            div()
-                                .flex_1()
-                                .h_full()
-                                .overflow_hidden()
-                                .child(capture::view::video_canvas(entity, cx)),
-                        );
-                    }
-                    if chunk.len() == 1 {
-                        row = row.child(div().flex_1());
-                    }
-                    grid = grid.child(row);
-                }
-                grid.into_any_element()
-            }
-        } else {
-            playback::view::video_canvas(&self.playback, cx)
-        };
         let viewport = window.viewport_size();
         let viewport_width = f32::from(viewport.width);
         let viewport_height = f32::from(viewport.height);
-        let controls = control_bar(self, capturing, viewport_width, viewport_height, cx);
-
+        let sidebar_width = if self.is_sidebar_open() {
+            crate::features::playlist::view::PLAYLIST_WIDTH
+        } else {
+            0.0
+        };
         let scale_x = (self.config.frame_scale_x.clamp(10, 400) as f32) / 100.0;
         let scale_y = (self.config.frame_scale_y.clamp(10, 400) as f32) / 100.0;
         let has_subtitle = self
@@ -706,6 +703,105 @@ impl Render for PlayerFrameController {
         } else {
             0.0
         };
+
+        let capture_error = self.capture.read(cx).error().map(str::to_string);
+        if capture_error != self.last_capture_error {
+            if let Some(error) = capture_error.clone() {
+                self.show_notice(error, cx);
+            }
+            self.last_capture_error = capture_error;
+        }
+        let capturing = self.capture.read(cx).is_active()
+            || (self.last_capture_error.is_some() && !self.playback.read(cx).is_loaded());
+        let canvas = if capturing {
+            let entities = self.capture_entities();
+            if entities.len() <= 1 {
+                capture::view::video_canvas(&self.capture, cx)
+            } else {
+                let rows = entities.len().div_ceil(2);
+                let pane_width =
+                    (((viewport_width - sidebar_width) * scale_x - 2.0) / 2.0).max(0.0);
+                let pane_height = (((viewport_height
+                    - theme::titlebar_height()
+                    - theme::control_bar_height())
+                    * scale_y
+                    * (1.0 - margin_fraction)
+                    - 2.0 * (rows - 1) as f32)
+                    / rows as f32)
+                    .max(0.0);
+                let pane_text_size = (pane_height * 0.03)
+                    .min(pane_width / 40.0)
+                    .clamp(11.0, 30.0);
+                let pane_osd_enabled = self.osd_mode() == Some(OsdMode::Full);
+                let pane_owner = cx.entity().downgrade();
+                let mut grid = div().size_full().flex().flex_col().gap(px(2.0));
+                for (row_index, chunk) in entities.chunks(2).enumerate() {
+                    let mut row = div().flex_1().w_full().flex().gap(px(2.0));
+                    for (column, entity) in chunk.iter().enumerate() {
+                        let index = row_index * 2 + column;
+                        let owner = pane_owner.clone();
+                        let pane_osd = if pane_osd_enabled {
+                            self.capture_full_data(entity.read(cx)).map(|data| {
+                                osd::full_osd(
+                                    (pane_width - 2.0 * PANE_OSD_INSET).max(0.0),
+                                    pane_text_size,
+                                    PANE_OSD_INSET,
+                                    PANE_OSD_INSET,
+                                    &data,
+                                )
+                            })
+                        } else {
+                            None
+                        };
+                        let mut pane = div()
+                            .relative()
+                            .flex_1()
+                            .h_full()
+                            .overflow_hidden()
+                            .child(capture::view::video_canvas(entity, cx));
+                        if let Some(pane_osd) = pane_osd {
+                            pane = pane.child(pane_osd);
+                        }
+                        row = row.child(
+                            pane.child(
+                                div()
+                                    .id(ElementId::Name(
+                                        format!("capture-pane-close-{index}").into(),
+                                    ))
+                                    .absolute()
+                                    .top(px(8.0))
+                                    .right(px(8.0))
+                                    .size(px(24.0))
+                                    .rounded_full()
+                                    .bg(rgba(0x00000090))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(12.0))
+                                    .text_color(rgb(0xFFFFFF))
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(rgba(0xC42B1CFF)))
+                                    .on_click(move |_, _, cx: &mut App| {
+                                        let _ = owner.update(cx, |this, cx| {
+                                            this.close_capture_pane(index, cx)
+                                        });
+                                    })
+                                    .child("✕"),
+                            ),
+                        );
+                    }
+                    if chunk.len() == 1 {
+                        row = row.child(div().flex_1());
+                    }
+                    grid = grid.child(row);
+                }
+                grid.into_any_element()
+            }
+        } else {
+            playback::view::video_canvas(&self.playback, cx)
+        };
+        let controls = control_bar(self, capturing, viewport_width, viewport_height, cx);
+
         let stage = div()
             .flex_1()
             .h_full()
@@ -831,11 +927,6 @@ impl Render for PlayerFrameController {
             root = root.child(notice);
         }
 
-        let sidebar_width = if self.is_sidebar_open() {
-            crate::features::playlist::view::PLAYLIST_WIDTH
-        } else {
-            0.0
-        };
         let osd_area_width = viewport_width - sidebar_width;
         let osd_area_height = viewport_height - theme::titlebar_height() - theme::control_bar_height();
         if let Some(osd) = self.render_osd(osd_area_width, osd_area_height, cx) {

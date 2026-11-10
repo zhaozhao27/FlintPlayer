@@ -673,7 +673,7 @@ fn camera_tab(
             30.0,
             420.0,
             "多设备同步采集（分屏显示）",
-            split_enabled && split_available,
+            split_enabled,
             split_available,
         )
         .id("settings-split")

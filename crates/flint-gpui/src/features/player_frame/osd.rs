@@ -7,7 +7,7 @@ const LABEL_COLOR: u32 = 0xffffff;
 const ROW_HEIGHT_RATIO: f32 = 1.4;
 const LABEL_GAP_RATIO: f32 = 0.4;
 const SECTION_GAP_RATIO: f32 = 0.2;
-const OSD_INSET: f32 = 18.0;
+pub(super) const OSD_INSET: f32 = 18.0;
 
 pub(super) const GREEN: u32 = 0;
 pub(super) const RED: u32 = 1;
@@ -64,11 +64,17 @@ enum OsdRow {
     Gap,
 }
 
-pub(super) fn full_osd(width: f32, text_size: f32, data: &FullData) -> AnyElement {
+pub(super) fn full_osd(
+    width: f32,
+    text_size: f32,
+    left: f32,
+    top: f32,
+    data: &FullData,
+) -> AnyElement {
     let mut column = div()
         .absolute()
-        .left(px(OSD_INSET))
-        .top(px(theme::titlebar_height() + OSD_INSET))
+        .left(px(left))
+        .top(px(top))
         .w(px(width))
         .flex()
         .flex_col()

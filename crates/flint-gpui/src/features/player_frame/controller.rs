@@ -153,6 +153,7 @@ pub struct PlayerFrameController {
     pub(crate) playback: Entity<PlaybackController>,
     pub(crate) capture: Entity<CaptureController>,
     pub(crate) extras: Vec<Entity<CaptureController>>,
+    pub(crate) last_capture_error: Option<String>,
     pub(crate) playlist: Entity<PlaylistController>,
     pub(crate) settings: Entity<SettingsController>,
     menu: Vec<MenuEntry>,
@@ -273,8 +274,11 @@ impl PlayerFrameController {
             playback,
             capture: cx.new(|_| CaptureController::new()),
             extras: Vec::new(),
+            last_capture_error: None,
             playlist,
-            settings: cx.new(|_| SettingsController::new(config.capture_selections.clone())),
+            settings: cx.new(|_| {
+                SettingsController::new(config.capture_selections.clone(), config.capture_split)
+            }),
             menu,
             menu_open: false,
             open_path: Vec::new(),
@@ -368,6 +372,27 @@ impl PlayerFrameController {
         for extra in self.extras.drain(..) {
             extra.update(cx, |capture, cx| capture.stop(cx));
         }
+    }
+
+    pub(crate) fn close_capture_pane(&mut self, index: usize, cx: &mut Context<Self>) {
+        if self.capture_entities().len() <= 1 {
+            return;
+        }
+        if index == 0 {
+            if self.extras.is_empty() {
+                return;
+            }
+            let promoted = self.extras.remove(0);
+            let previous = std::mem::replace(&mut self.capture, promoted);
+            previous.update(cx, |capture, cx| capture.stop(cx));
+        } else {
+            let Some(extra) = self.extras.get(index - 1).cloned() else {
+                return;
+            };
+            self.extras.remove(index - 1);
+            extra.update(cx, |capture, cx| capture.stop(cx));
+        }
+        cx.notify();
     }
 
     pub fn configure_source(

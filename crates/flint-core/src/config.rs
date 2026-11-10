@@ -11,6 +11,7 @@ pub struct Config {
     pub resume: Vec<(String, f64)>,
     pub capture_selections: Vec<(String, String, u32, u32)>,
     pub capture_smoothing: String,
+    pub capture_split: bool,
     pub capture_audio_source: String,
     pub remember_position: bool,
     pub show_markers: bool,
@@ -164,6 +165,7 @@ impl Default for Config {
             resume: Vec::new(),
             capture_selections: Vec::new(),
             capture_smoothing: "system".into(),
+            capture_split: false,
             capture_audio_source: String::new(),
             remember_position: true,
             show_markers: true,
@@ -389,6 +391,7 @@ impl Config {
                     }
                 }
                 "capture_audio_source" => cfg.capture_audio_source = value.trim().to_string(),
+                "capture_split" => cfg.capture_split = value == "true" || value == "1",
                 "remember_position" => cfg.remember_position = value == "true" || value == "1",
                 "show_markers" => cfg.show_markers = value == "true" || value == "1",
                 "seek_step_seconds" => {
@@ -800,6 +803,7 @@ impl Config {
              resume={}\n\
              capture_selections={}\n\
              capture_smoothing={}\n\
+             capture_split={}\n\
              capture_audio_source={}\n\
              remember_position={}\n\
              show_markers={}\n\
@@ -969,6 +973,7 @@ impl Config {
             )),
             sanitize(&encode_capture_selections(&self.capture_selections)),
             sanitize(&self.capture_smoothing),
+            self.capture_split,
             sanitize(&self.capture_audio_source),
             self.remember_position,
             self.show_markers,
@@ -1593,6 +1598,27 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert!(saved.contains("capture_smoothing=medium\n"));
         assert_eq!(Config::parse(&saved).capture_smoothing, "medium");
+    }
+
+    #[test]
+    fn round_trips_capture_split() {
+        assert!(Config::parse("capture_split=true\n").capture_split);
+        assert!(!Config::parse("capture_split=bogus\n").capture_split);
+        assert!(!Config::parse("").capture_split);
+        let path = std::env::temp_dir().join(format!(
+            "flint-config-split-{}.ini",
+            std::process::id()
+        ));
+        Config {
+            capture_split: true,
+            ..Config::default()
+        }
+        .save_to(&path)
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(saved.contains("capture_split=true\n"));
+        assert!(Config::parse(&saved).capture_split);
     }
 
     #[test]

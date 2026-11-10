@@ -133,11 +133,12 @@ pub struct SettingsController {
     audio_monitor: bool,
     manual_device: Option<String>,
     split_enabled: bool,
+    pending_split: Option<bool>,
     active_source: Option<String>,
 }
 
 impl SettingsController {
-    pub fn new(selections: Vec<(String, String, u32, u32)>) -> Self {
+    pub fn new(selections: Vec<(String, String, u32, u32)>, split_enabled: bool) -> Self {
         let saved = selections
             .iter()
             .map(|(device, fourcc, width, height)| {
@@ -172,7 +173,8 @@ impl SettingsController {
             time_positioning: false,
             audio_monitor: true,
             manual_device: None,
-            split_enabled: false,
+            split_enabled,
+            pending_split: None,
             active_source: None,
         }
     }
@@ -422,7 +424,12 @@ impl SettingsController {
             return;
         }
         self.split_enabled = !self.split_enabled;
+        self.pending_split = Some(self.split_enabled);
         cx.notify();
+    }
+
+    pub fn take_split_update(&mut self) -> Option<bool> {
+        self.pending_split.take()
     }
 
     fn split_requested(&self) -> bool {

@@ -102,7 +102,7 @@ cargo deb -p flintplayer-desktop --no-build
 安装软件包：
 
 ```bash
-sudo apt install ./target/debian/flintplayer_1.1.2-1_amd64.deb
+sudo apt install ./target/debian/flintplayer_1.1.3-1_amd64.deb
 ```
 
 运行时依赖：`libmpv2 | libmpv1`、`libvulkan1`、`mesa-vulkan-drivers`、`fonts-noto-cjk`；建议同时安装 `zenity`、`ffmpeg`、`xdg-utils`，以支持文件对话框、缩略图生成和打开所在文件夹。
