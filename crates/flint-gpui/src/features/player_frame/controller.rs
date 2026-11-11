@@ -164,6 +164,9 @@ pub struct PlayerFrameController {
     notice_serial: u64,
     notice_opacity: f32,
     pub(crate) volume_drag: std::rc::Rc<std::cell::Cell<bool>>,
+    pub(crate) analysis_seek: Option<f32>,
+    analysis_total: std::sync::Arc<std::sync::Mutex<Option<(String, i64)>>>,
+    analysis_total_pending: Option<String>,
     focus_handle: FocusHandle,
     repeat: bool,
     shuffle: bool,
@@ -287,6 +290,9 @@ impl PlayerFrameController {
             notice_serial: 0,
             notice_opacity: 1.0,
             volume_drag: std::rc::Rc::new(std::cell::Cell::new(false)),
+            analysis_seek: None,
+            analysis_total: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            analysis_total_pending: None,
             focus_handle: cx.focus_handle(),
             repeat: false,
             shuffle: false,
@@ -735,7 +741,7 @@ impl PlayerFrameController {
         let state = playback.state();
         let capture = self.capture.read(cx);
         format!(
-            "{loaded}|{title}|{w}x{h}|{pos:.2}|{dur:.2}|{paused}|{vol:.2}|{speed:.3}|{eof}|{error}|\
+            "{loaded}|{title}|{w}x{h}|{pos:.2}|{dur:.2}|{total}|{paused}|{vol:.2}|{speed:.3}|{eof}|{error}|\
              {active}|{info}|{notice}|{osd}|{margin}|{auto}|{force}|{sidebar}|{menu}|{path}|{brightness}|\
              {contrast}|{saturation}|{rotation}|{tracks}|{flip_h}|{flip_v}|{zoom}|{panx}|{pany}",
             loaded = state.loaded,
@@ -744,6 +750,7 @@ impl PlayerFrameController {
             h = state.height,
             pos = state.position,
             dur = state.duration,
+            total = self.analysis_frame_total(playback).unwrap_or(0),
             paused = state.paused,
             vol = state.volume,
             speed = playback.speed(),
@@ -774,6 +781,7 @@ impl PlayerFrameController {
 
     fn poll_playback(&mut self, cx: &mut Context<Self>) {
         self.playback.update(cx, |playback, _| playback.refresh());
+        self.spawn_analysis_frame_count(cx);
         let (loaded, duration, eof, width, height) = {
             let state = self.playback.read(cx).state();
             (state.loaded, state.duration, state.eof, state.width, state.height)
@@ -841,10 +849,84 @@ impl PlayerFrameController {
             self.saved_position(path)
         };
         self.eof_handled = true;
+        self.analysis_seek = None;
         self.sync_playlist(cx);
         self.playback
             .update(cx, |playback, cx| playback.open(path, cx));
         self.apply_image(cx);
+        cx.notify();
+    }
+
+    pub(crate) fn begin_analysis_seek(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if !self.playback.read(cx).analysis_mode() {
+            return;
+        }
+        self.analysis_seek = Some(fraction.clamp(0.0, 1.0));
+        cx.notify();
+    }
+
+    pub(crate) fn drag_analysis_seek(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if self.analysis_seek.is_none() {
+            return;
+        }
+        let fraction = fraction.clamp(0.0, 1.0);
+        if self.analysis_seek != Some(fraction) {
+            self.analysis_seek = Some(fraction);
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn analysis_frame_total(&self, playback: &PlaybackController) -> Option<i64> {
+        let measured = (|| {
+            let media = playback.media_path()?;
+            let state = self.analysis_total.lock().ok()?;
+            state
+                .as_ref()
+                .filter(|(path, _)| path == media)
+                .map(|(_, count)| *count)
+        })();
+        measured.or_else(|| playback.analysis_total_frames())
+    }
+
+    fn spawn_analysis_frame_count(&mut self, cx: &mut Context<Self>) {
+        let playback = self.playback.read(cx);
+        if !playback.analysis_mode() {
+            return;
+        }
+        let Some(path) = playback.media_path().map(str::to_owned) else {
+            return;
+        };
+        let measured = self
+            .analysis_total
+            .lock()
+            .ok()
+            .and_then(|state| state.as_ref().map(|(known, _)| known == &path));
+        if measured == Some(true) || self.analysis_total_pending.as_deref() == Some(path.as_str()) {
+            return;
+        }
+        self.analysis_total_pending = Some(path.clone());
+        let slot = self.analysis_total.clone();
+        std::thread::spawn(move || {
+            let counted = flint_media::video_probe::frame_count(Path::new(&path));
+            if let (Ok(count), Ok(mut state)) = (counted, slot.lock()) {
+                *state = Some((path, count));
+            }
+        });
+    }
+
+    pub(crate) fn commit_analysis_seek(&mut self, cx: &mut Context<Self>) {
+        let Some(fraction) = self.analysis_seek.take() else {
+            return;
+        };
+        let target = {
+            let playback = self.playback.read(cx);
+            self.analysis_frame_total(&playback)
+                .map(|total| (fraction.clamp(0.0, 1.0) * (total - 1) as f32).round() as i64)
+        };
+        if let Some(target) = target {
+            self.playback
+                .update(cx, |playback, cx| playback.seek_to_frame(target, cx));
+        }
         cx.notify();
     }
 

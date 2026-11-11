@@ -311,6 +311,13 @@ impl MpvPlayer {
             .and_then(|value| value.parse().ok())
     }
 
+    /// Total frame count reported by the demuxer, when known.
+    pub fn frame_count(&self) -> Option<i64> {
+        get_property_string(&self.api, self.handle, "estimated-frame-count")
+            .and_then(|value| value.parse().ok())
+            .filter(|count| *count > 0)
+    }
+
     /// Decoded video pixel format reported by the video output.
     pub fn pixel_format(&self) -> Option<String> {
         get_property_string(&self.api, self.handle, "video-params/pixelformat")

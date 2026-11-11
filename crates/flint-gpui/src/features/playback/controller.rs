@@ -9,7 +9,7 @@ use flint_media::recorder::{RecordSummary, Recorder};
 use flint_media::stereo::{self, StereoMode};
 use gpui::*;
 
-const STEP_ACK_TIMEOUT: Duration = Duration::from_millis(500);
+const STEP_ACK_TIMEOUT: Duration = Duration::from_millis(1200);
 const BACK_PROBE_TIMEOUT: Duration = Duration::from_millis(500);
 const STEP_SETTLE: Duration = Duration::from_millis(400);
 const STEP_LOAD_GUARD: Duration = Duration::from_millis(500);
@@ -440,11 +440,16 @@ impl PlaybackController {
     }
 
     fn resync_frame_index(&mut self) {
+        if self.state.eof {
+            self.step_stale = false;
+            return;
+        }
         let fps = self.analysis_fps();
         let actual = self
             .player
             .as_ref()
             .and_then(|player| player.frame_number())
+            .filter(|number| *number > 0 || self.state.position <= 0.0)
             .or_else(|| {
                 if fps > 0.0 && self.state.position > 0.0 {
                     Some((self.state.position * fps).round() as i64)
@@ -660,6 +665,43 @@ impl PlaybackController {
         }
         self.refresh();
         cx.notify();
+    }
+
+    pub fn analysis_total_frames(&self) -> Option<i64> {
+        let fps = self.analysis_fps();
+        self.player
+            .as_ref()
+            .and_then(|player| player.frame_count())
+            .or_else(|| {
+                if fps > 0.0 && self.state.duration > 0.0 {
+                    Some((self.state.duration * fps).round() as i64)
+                } else {
+                    None
+                }
+            })
+            .filter(|count| *count > 1)
+    }
+
+    pub fn seek_to_frame(&mut self, target: i64, cx: &mut Context<Self>) {
+        if !self.analysis || (!self.is_loaded() && !self.step_in_flight()) {
+            return;
+        }
+        if self.step_stale {
+            self.resync_frame_index();
+        }
+        let target = target.max(0);
+        if target < self.step_issued {
+            self.reload_at_frame(target);
+        } else {
+            self.frame_index = target;
+            self.extend_step_deadline();
+        }
+        self.refresh();
+        cx.notify();
+    }
+
+    pub fn media_path(&self) -> Option<&str> {
+        self.media.as_deref()
     }
 
     pub fn set_volume(&mut self, volume: f64, cx: &mut Context<Self>) {

@@ -139,7 +139,24 @@ pub fn control_bar(
         )
     };
 
-    let fraction = if duration > 0.0 {
+    let (analysis, frame_position, frame_total) = {
+        let playback = frame.playback.read(cx);
+        if !capturing && playback.analysis_mode() {
+            (
+                true,
+                playback.frame_number(),
+                frame.analysis_frame_total(&playback),
+            )
+        } else {
+            (false, 0, None)
+        }
+    };
+    let frame_fraction = frame_total
+        .map(|total| (frame_position as f32 / (total - 1) as f32).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+    let fraction = if analysis {
+        frame.analysis_seek.unwrap_or(frame_fraction)
+    } else if duration > 0.0 {
         (position / duration).clamp(0.0, 1.0) as f32
     } else {
         0.0
@@ -149,6 +166,9 @@ pub fn control_bar(
     let seek_bounds = frame.playback.read(cx).progress_bounds();
     let seek_down_bounds = seek_bounds.clone();
     let seek_move_bounds = seek_bounds.clone();
+    let seek_drag_bounds = seek_bounds.clone();
+    let analysis_down = analysis;
+    let analysis_move = analysis;
 
     let mut seek_area = div()
         .id("control-seek")
@@ -159,8 +179,12 @@ pub fn control_bar(
             MouseButton::Left,
             cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                 let fraction = seek_fraction(event.position, seek_down_bounds.get());
-                this.playback
-                    .update(cx, |playback, cx| playback.seek_fraction(fraction, cx));
+                if analysis_down {
+                    this.begin_analysis_seek(fraction as f32, cx);
+                } else {
+                    this.playback
+                        .update(cx, |playback, cx| playback.seek_fraction(fraction, cx));
+                }
             }),
         )
         .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
@@ -168,8 +192,12 @@ pub fn control_bar(
                 return;
             }
             let fraction = seek_fraction(event.position, seek_move_bounds.get());
-            this.playback
-                .update(cx, |playback, cx| playback.seek_fraction(fraction, cx));
+            if analysis_move {
+                this.drag_analysis_seek(fraction as f32, cx);
+            } else {
+                this.playback
+                    .update(cx, |playback, cx| playback.seek_fraction(fraction, cx));
+            }
         }))
         .child(
             canvas(
@@ -345,8 +373,17 @@ pub fn control_bar(
     let open = bar_button("bar-open", icons::OPEN, true)
         .on_click(cx.listener(|this, _, _, cx| this.handle_action("open-file".to_string(), cx)));
 
-    let elapsed = format_clock(position);
-    let duration_text = format_clock(duration);
+    let (elapsed, duration_text) = if analysis {
+        let shown = frame_total
+            .map(|total| (fraction * (total - 1) as f32).round() as i64)
+            .unwrap_or(frame_position);
+        let last = frame_total
+            .map(|total| (total - 1).to_string())
+            .unwrap_or_else(|| "--".to_string());
+        (format!("{} {}", tr("帧号"), shown), last)
+    } else {
+        (format_clock(position), format_clock(duration))
+    };
 
     let mut row = div()
         .absolute()
@@ -506,6 +543,41 @@ pub fn control_bar(
             ))
     };
 
+    let seek_drag_listener = {
+        let bounds = seek_drag_bounds.clone();
+        let target = cx.entity().downgrade();
+        div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .w_full()
+            .h(px(20.0))
+            .child(canvas(
+                |_, _, _| {},
+                move |_, _, window, _| {
+                    let bounds = bounds.clone();
+                    let move_target = target.clone();
+                    window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
+                        if phase != DispatchPhase::Bubble
+                            || event.pressed_button != Some(MouseButton::Left)
+                        {
+                            return;
+                        }
+                        if let Some(fraction) = pointer_fraction(event.position, bounds.get()) {
+                            let _ = move_target
+                                .update(cx, |this, cx| this.drag_analysis_seek(fraction, cx));
+                        }
+                    });
+                    let up_target = target.clone();
+                    window.on_mouse_event(move |_: &MouseUpEvent, phase, _window, cx| {
+                        if phase == DispatchPhase::Bubble {
+                            let _ = up_target.update(cx, |this, cx| this.commit_analysis_seek(cx));
+                        }
+                    });
+                },
+            ))
+    };
+
     div()
         .relative()
         .h(px(theme::control_bar_height()))
@@ -523,6 +595,7 @@ pub fn control_bar(
         )
         .child(top_row)
         .child(volume_drag_listener)
+        .child(seek_drag_listener)
         .child(row)
         .into_any_element()
 }

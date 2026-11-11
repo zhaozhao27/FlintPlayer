@@ -12,6 +12,7 @@ pub mod recorder;
 pub mod snapshot;
 pub mod stereo;
 pub mod subtitles;
+pub mod video_probe;
 
 use crossbeam_channel::bounded;
 use flint_core::command::CaptureCommand;
