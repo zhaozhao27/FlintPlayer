@@ -416,6 +416,9 @@ impl PlayerFrameController {
         if mode == OsdMode::Full && self.capture_entities().len() > 1 {
             return None;
         }
+        if self.playback.read(cx).analysis_mode() {
+            return None;
+        }
         let width = (area_width - 36.0).max(0.0);
         let playback = self.playback.read(cx);
         let state = playback.state();
@@ -546,6 +549,7 @@ impl PlayerFrameController {
         if !playback.analysis_mode() {
             return None;
         }
+        self.osd_mode()?;
         let state = playback.state();
         let frame = playback.frame_number();
         let seconds = if state.position > 0.0 {

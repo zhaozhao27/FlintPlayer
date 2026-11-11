@@ -401,6 +401,9 @@ impl PlayerFrameController {
         analysis: bool,
         cx: &mut Context<Self>,
     ) {
+        if analysis {
+            self.osd_mode = Some(OsdMode::Full);
+        }
         self.playback.update(cx, |playback, _| {
             if let Some(raw) = raw {
                 playback.set_raw_input(raw);
@@ -429,7 +432,13 @@ impl PlayerFrameController {
                     this.poll_playback(cx);
                     let state = this.playback.read(cx).state();
                     let busy = (state.loaded && !state.paused && !state.eof)
-                        || this.capture.read(cx).is_active();
+                        || this.capture.read(cx).is_active()
+                        || {
+                            let playback = this.playback.read(cx);
+                            playback.analysis_mode()
+                                && playback.is_loaded()
+                                && playback.texture().is_none()
+                        };
                     let fingerprint = this.view_fingerprint(cx);
                     if busy || fingerprint != this.last_fingerprint {
                         this.last_fingerprint = fingerprint;
@@ -1602,8 +1611,20 @@ impl PlayerFrameController {
             "y" => self.handle_action("saturation-down".into(), cx),
             "u" => self.handle_action("saturation-up".into(), cx),
             "q" => self.handle_action("adjust-reset".into(), cx),
-            "pageup" => self.handle_action("prev-panel".into(), cx),
-            "pagedown" => self.handle_action("next-panel".into(), cx),
+            "pageup" => {
+                if self.playback.read(cx).analysis_mode() {
+                    self.handle_action("step-backward".into(), cx);
+                } else {
+                    self.handle_action("prev-panel".into(), cx);
+                }
+            }
+            "pagedown" => {
+                if self.playback.read(cx).analysis_mode() {
+                    self.handle_action("step-forward".into(), cx);
+                } else {
+                    self.handle_action("next-panel".into(), cx);
+                }
+            }
             "f" | "enter" => window.toggle_fullscreen(),
             "left" => self
                 .playback

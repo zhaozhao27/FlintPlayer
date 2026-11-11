@@ -285,11 +285,12 @@ impl PlaybackController {
                         "sub-ass-override",
                         crate::subtitle_engine::mpv_value(&self.ass_engine),
                     );
-                    player.open(&path)
-                })
-                .and_then(|()| {
                     if analysis {
-                        player.pause()
+                        player.pause()?;
+                    }
+                    player.open(&path)?;
+                    if analysis {
+                        Ok(())
                     } else {
                         player.play()
                     }
