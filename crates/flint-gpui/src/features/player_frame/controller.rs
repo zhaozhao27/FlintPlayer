@@ -436,8 +436,7 @@ impl PlayerFrameController {
                         || {
                             let playback = this.playback.read(cx);
                             playback.analysis_mode()
-                                && playback.is_loaded()
-                                && playback.texture().is_none()
+                                && (playback.texture().is_none() || playback.busy_stepping())
                         };
                     let fingerprint = this.view_fingerprint(cx);
                     if busy || fingerprint != this.last_fingerprint {
@@ -816,6 +815,9 @@ impl PlayerFrameController {
     }
 
     fn handle_eof(&mut self, cx: &mut Context<Self>) {
+        if self.playback.read(cx).analysis_mode() {
+            return;
+        }
         self.remember_current_position(cx);
         let wrap = self.repeat;
         let shuffle = self.shuffle;
@@ -833,7 +835,11 @@ impl PlayerFrameController {
     pub fn open_media(&mut self, path: &Path, cx: &mut Context<Self>) {
         self.remember_current_position(cx);
         self.playlist.update(cx, |playlist, _| playlist.focus(path));
-        self.resume_pending = self.saved_position(path);
+        self.resume_pending = if self.playback.read(cx).analysis_mode() {
+            None
+        } else {
+            self.saved_position(path)
+        };
         self.eof_handled = true;
         self.sync_playlist(cx);
         self.playback

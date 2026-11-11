@@ -1,12 +1,19 @@
 use std::cell::Cell;
 use std::path::Path;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use flint_engine::{ChapterInfo, EngineError, MpvPlayer, PlayerState, TrackInfo};
 use flint_media::panorama;
 use flint_media::recorder::{RecordSummary, Recorder};
 use flint_media::stereo::{self, StereoMode};
 use gpui::*;
+
+const STEP_ACK_TIMEOUT: Duration = Duration::from_millis(500);
+const BACK_PROBE_TIMEOUT: Duration = Duration::from_millis(500);
+const STEP_SETTLE: Duration = Duration::from_millis(400);
+const STEP_LOAD_GUARD: Duration = Duration::from_millis(500);
+const STEP_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, Default)]
 pub struct RawInput {
@@ -37,6 +44,16 @@ pub struct PlaybackController {
     raw_input: Option<RawInput>,
     analysis: bool,
     frame_index: i64,
+    media: Option<String>,
+    step_issued: i64,
+    step_pending_ack: bool,
+    step_issued_at: Option<Instant>,
+    step_deadline: Option<Instant>,
+    settle_until: Option<Instant>,
+    load_guard: Option<Instant>,
+    back_probe: Option<(i64, f64, Instant)>,
+    step_stale: bool,
+    wake_pending: bool,
     audio_device: String,
     pixel_shader: String,
     ass_engine: String,
@@ -75,6 +92,16 @@ impl PlaybackController {
             raw_input: None,
             analysis: false,
             frame_index: 0,
+            media: None,
+            step_issued: 0,
+            step_pending_ack: false,
+            step_issued_at: None,
+            step_deadline: None,
+            settle_until: None,
+            load_guard: None,
+            back_probe: None,
+            step_stale: false,
+            wake_pending: false,
             audio_device: "auto".to_string(),
             pixel_shader: String::new(),
             ass_engine: "basic".to_string(),
@@ -275,6 +302,8 @@ impl PlaybackController {
         }
         self.frame_index = 0;
         self.raw_frame.clear();
+        self.reset_step_state();
+        self.media = Some(path.to_string_lossy().into_owned());
         let path = path.to_string_lossy();
         let analysis = self.analysis;
         let result = match self.player.as_ref() {
@@ -318,24 +347,271 @@ impl PlaybackController {
     }
 
     pub fn step_frame(&mut self, delta: i64, cx: &mut Context<Self>) {
-        let result = self.player.as_ref().map(|player| {
-            player.pause()?;
-            player.command(if delta < 0 {
-                "frame-back-step"
-            } else {
-                "frame-step"
-            })
-        });
-        match result {
-            Some(Ok(())) => {
-                self.error = None;
-                self.frame_index = (self.frame_index + delta).max(0);
+        if delta == 0 {
+            return;
+        }
+        if !self.analysis {
+            let result = self.player.as_ref().map(|player| {
+                player.pause()?;
+                player.command(if delta < 0 {
+                    "frame-back-step"
+                } else {
+                    "frame-step"
+                })
+            });
+            match result {
+                Some(Ok(())) => {
+                    self.error = None;
+                    self.frame_index = (self.frame_index + delta).max(0);
+                }
+                Some(Err(error)) => self.error = Some(error.to_string()),
+                None => {}
             }
-            Some(Err(error)) => self.error = Some(error.to_string()),
-            None => {}
+            self.refresh();
+            cx.notify();
+            return;
+        }
+        if !self.is_loaded() && !self.step_in_flight() {
+            return;
+        }
+        if self.step_stale {
+            self.resync_frame_index();
+        }
+        let target = self.frame_index + delta;
+        if target < 0 {
+            return;
+        }
+        if delta > 0 {
+            self.frame_index = target;
+            self.extend_step_deadline();
+        } else if self.back_probe.is_some() {
+            self.reload_at_frame(target);
+        } else if self.step_issued > target {
+            if self.step_pending_ack {
+                self.reload_at_frame(target);
+            } else {
+                self.probe_back_step(target);
+            }
+        } else {
+            self.frame_index = target;
+            self.extend_step_deadline();
         }
         self.refresh();
         cx.notify();
+    }
+
+    pub fn busy_stepping(&self) -> bool {
+        self.analysis
+            && (self.back_probe.is_some()
+                || self.step_pending_ack
+                || self.wake_pending
+                || self.step_issued != self.frame_index
+                || self.settle_until.is_some_and(|until| Instant::now() < until))
+    }
+
+    fn step_in_flight(&self) -> bool {
+        self.media.is_some()
+            && (self.load_guard.is_some()
+                || self.wake_pending
+                || self.step_deadline.is_some()
+                || self.back_probe.is_some())
+    }
+
+    fn reset_step_state(&mut self) {
+        self.step_issued = 0;
+        self.step_pending_ack = false;
+        self.step_issued_at = None;
+        self.step_deadline = None;
+        self.settle_until = None;
+        self.load_guard = None;
+        self.back_probe = None;
+        self.step_stale = false;
+        self.wake_pending = false;
+    }
+
+    fn extend_step_deadline(&mut self) {
+        self.step_deadline = Some(Instant::now() + STEP_IDLE_TIMEOUT);
+    }
+
+    fn state_at_start(&self) -> bool {
+        let fps = self.analysis_fps();
+        let tolerance = if fps > 0.0 { 0.5 / fps } else { 1e-4 };
+        self.state.position <= tolerance
+    }
+
+    fn resync_frame_index(&mut self) {
+        let fps = self.analysis_fps();
+        let actual = self
+            .player
+            .as_ref()
+            .and_then(|player| player.frame_number())
+            .or_else(|| {
+                if fps > 0.0 && self.state.position > 0.0 {
+                    Some((self.state.position * fps).round() as i64)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(self.frame_index);
+        self.frame_index = actual.max(0);
+        self.step_issued = self.frame_index;
+        self.step_pending_ack = false;
+        self.step_issued_at = None;
+        self.back_probe = None;
+        self.step_stale = false;
+    }
+
+    fn probe_back_step(&mut self, target: i64) {
+        let result = self.player.as_ref().map(|player| {
+            let base = player.state().position;
+            player.pause()?;
+            player.command("frame-back-step")?;
+            Ok::<f64, EngineError>(base)
+        });
+        match result {
+            Some(Ok(base)) => {
+                self.frame_index = target;
+                self.back_probe = Some((target, base, Instant::now()));
+                self.settle_until = Some(Instant::now() + STEP_SETTLE);
+                self.error = None;
+                self.extend_step_deadline();
+            }
+            Some(Err(error)) => {
+                self.error = Some(error.to_string());
+                self.reload_at_frame(target);
+            }
+            None => {}
+        }
+    }
+
+    fn reload_at_frame(&mut self, target: i64) {
+        self.frame_index = target.max(0);
+        self.back_probe = None;
+        self.settle_until = None;
+        self.step_pending_ack = false;
+        self.step_issued_at = None;
+        self.step_stale = false;
+        self.load_guard = Some(Instant::now() + STEP_LOAD_GUARD);
+        let Some(path) = self.media.clone() else {
+            return;
+        };
+        let Some(player) = self.player.as_ref() else {
+            return;
+        };
+        let _ = player.pause();
+        let _ = apply_raw_input(player, self.raw_input.as_ref());
+        self.step_issued = 0;
+        self.wake_pending = target == 0;
+        self.state.loaded = false;
+        self.state.width = 0;
+        self.state.height = 0;
+        self.state.position = 0.0;
+        self.state.eof = false;
+        let result = player.open(&path);
+        match result {
+            Ok(()) => {
+                self.error = None;
+                self.extend_step_deadline();
+            }
+            Err(error) => {
+                self.error = Some(error.to_string());
+            }
+        }
+    }
+
+    fn on_frame_rendered(&mut self) {
+        self.step_pending_ack = false;
+    }
+
+    fn advance_steps(&mut self) {
+        let Some(deadline) = self.step_deadline else {
+            return;
+        };
+        if Instant::now() > deadline {
+            self.step_deadline = None;
+            self.step_pending_ack = false;
+            self.load_guard = None;
+            self.back_probe = None;
+            return;
+        }
+        if let Some((target, base, started)) = self.back_probe {
+            if started.elapsed() < BACK_PROBE_TIMEOUT {
+                return;
+            }
+            self.back_probe = None;
+            let position = self
+                .player
+                .as_ref()
+                .map(|player| player.state().position)
+                .unwrap_or(base);
+            if position + 1e-4 < base {
+                self.step_issued = target;
+                self.step_pending_ack = false;
+                self.settle_until = Some(Instant::now() + STEP_SETTLE);
+            } else {
+                let target = self.frame_index;
+                self.reload_at_frame(target);
+            }
+            return;
+        }
+        if !self.state.loaded || self.state.width == 0 {
+            return;
+        }
+        if self.wake_pending {
+            self.wake_pending = false;
+            if let Some(player) = self.player.as_ref() {
+                let _ = player.set_property("pause", "no");
+                let _ = player.set_property("pause", "yes");
+            }
+            self.settle_until = Some(Instant::now() + STEP_SETTLE);
+        }
+        if self.step_issued == 0 {
+            if let Some(guard) = self.load_guard {
+                if Instant::now() < guard {
+                    if !self.state_at_start() {
+                        return;
+                    }
+                }
+                self.load_guard = None;
+            }
+        }
+        if self.step_issued >= self.frame_index {
+            if !self.step_pending_ack {
+                self.step_deadline = None;
+            }
+            return;
+        }
+        let now = Instant::now();
+        if self.step_pending_ack {
+            let elapsed = self.step_issued_at.map(|at| now - at);
+            if elapsed.is_none_or(|elapsed| elapsed < STEP_ACK_TIMEOUT) {
+                return;
+            }
+            self.step_pending_ack = false;
+            let fps = self.analysis_fps();
+            let landed = fps <= 0.0
+                || self.state.position + 0.5 / fps >= self.step_issued as f64 / fps;
+            if !landed {
+                self.step_issued = self.step_issued.saturating_sub(1);
+            }
+        }
+        let Some(player) = self.player.as_ref() else {
+            return;
+        };
+        let _ = player.pause();
+        match player.command("frame-step") {
+            Ok(()) => {
+                self.step_issued += 1;
+                self.step_pending_ack = true;
+                self.step_issued_at = Some(now);
+                self.settle_until = Some(now + STEP_SETTLE);
+                self.error = None;
+            }
+            Err(error) => {
+                self.error = Some(error.to_string());
+                self.step_deadline = None;
+            }
+        }
     }
 
     pub fn toggle_pause(&mut self, cx: &mut Context<Self>) {
@@ -352,6 +628,8 @@ impl PlaybackController {
         if let Some(Err(error)) = result {
             self.error = Some(error.to_string());
         }
+        self.reset_step_state();
+        self.media = None;
         self.refresh();
         cx.notify();
     }
@@ -593,11 +871,19 @@ impl PlaybackController {
                     state.duration
                 );
             }
+            if self.analysis
+                && !state.paused
+                && !self.state.paused
+                && state.position > self.state.position + 1e-4
+            {
+                self.step_stale = true;
+            }
             self.state = state;
             if self.state.loaded {
                 let _ = self.apply_vf(false);
             }
         }
+        self.advance_steps();
     }
 
     pub fn upload_frame(&mut self, window: &mut Window) {
@@ -622,6 +908,9 @@ impl PlaybackController {
                 return;
             }
         };
+        if fresh {
+            self.on_frame_rendered();
+        }
         if !fresh && !self.shader_dirty {
             return;
         }
